@@ -1,0 +1,3294 @@
+/* ==========================================================================
+   MULTIBOT FOUNDATION — layout/geometry contract
+   Phase 1 of the UI refactor.
+   Theme files must change appearance only; this file owns geometry.
+   No trading/runtime logic belongs here.
+   ========================================================================== */
+
+:root{
+  /* Foundation spacing scale */
+  --f-space-1:4px;
+  --f-space-2:8px;
+  --f-space-3:12px;
+  --f-space-4:16px;
+  --f-space-5:20px;
+  --f-space-6:24px;
+
+  /* Shared geometry */
+  --f-section-gap:16px;
+  --f-section-gap-compact:12px;
+  --f-grid-gap:12px;
+  --f-card-gap:10px;
+  --f-section-pad:16px;
+  --f-card-pad:12px;
+  --f-control-h:36px;
+  --f-control-h-mobile:40px;
+  --f-content-max:1500px;
+  --f-radius:12px;
+  --f-radius-sm:9px;
+  --f-border-w:1px;
+  --f-neo-depth:3px;
+
+  /* Fixed navigation clearance */
+  --f-mobile-nav-h:60px;
+  --f-mobile-nav-clearance:76px;
+
+  /* Canonical UI contract — migration aliases for later component passes.
+     Existing --f-* values remain the current runtime contract in Pass 1. */
+  --ui-space-1:var(--f-space-1);
+  --ui-space-2:var(--f-space-2);
+  --ui-space-3:var(--f-space-3);
+  --ui-space-4:var(--f-space-4);
+  --ui-space-5:var(--f-space-5);
+  --ui-space-6:var(--f-space-6);
+  --ui-section-gap:var(--f-section-gap);
+  --ui-grid-gap:var(--f-grid-gap);
+  --ui-card-gap:var(--f-card-gap);
+  --ui-section-pad:var(--f-section-pad);
+  --ui-card-pad:var(--f-card-pad);
+  --ui-control-height:var(--f-control-h);
+  --ui-content-max:var(--f-content-max);
+  --ui-radius-medium:var(--f-radius);
+  --ui-radius-small:var(--f-radius-sm);
+  --ui-border-width:var(--f-border-w);
+  --ui-mobile-nav-height:var(--f-mobile-nav-h);
+  --ui-mobile-nav-clearance:var(--f-mobile-nav-clearance);
+
+  /* Single source of truth for every expand/collapse control.
+     Nothing else may define a competing control size or radius. */
+  --ui-collapse-size:32px;
+  --ui-collapse-radius:10px;
+  --ui-collapse-tap:44px; /* invisible pointer target; never below 44px */
+  --ui-collapse-border:1px solid var(--line);
+  --ui-collapse-icon-size:7px; /* one glyph for every expand control */
+  --ui-collapse-icon-weight:1.75px;
+}
+
+/* ---------- Geometry reset ------------------------------------------------ */
+html,body{min-width:0}
+body{overflow-x:hidden}
+img,svg,canvas,video{max-width:100%}
+button,input,select,textarea{max-width:100%}
+button{min-width:0}
+
+.app{
+  width:min(1280px,100%);
+  min-width:0;
+  margin-inline:auto;
+}
+
+main{
+  width:100%;
+  min-width:0;
+  max-width:var(--f-content-max);
+}
+
+.page{
+  width:100%;
+  min-width:0;
+  min-height:0;
+}
+
+.page > *{
+  min-width:0;
+}
+
+.page > * + *{
+  margin-top:var(--f-section-gap);
+}
+
+/* ---------- Shared section contract -------------------------------------- */
+.section-block,
+.signals-workspace,
+.history-workspace,
+.calendar-workspace,
+.tool-card{
+  min-width:0;
+  box-sizing:border-box;
+}
+
+.section-heading,
+.workspace-heading,
+.page-heading{
+  min-width:0;
+}
+
+.section-heading > *,
+.workspace-heading > *,
+.page-heading > *{
+  min-width:0;
+}
+
+.section-heading{
+  min-height:32px;
+  margin-bottom:var(--f-space-2);
+}
+
+.section-heading > :first-child,
+.workspace-heading > :first-child,
+.page-heading > :first-child{
+  min-width:0;
+}
+
+/* ---------- Shared grid contract ----------------------------------------- */
+.metric-grid,
+.history-summary-grid,
+.calendar-summary-grid,
+.detail-grid,
+.backtest-summary,
+.backtest-metrics,
+.account-grid,
+.diagnostic-grid,
+.schedule-inline,
+.universe-grid{
+  min-width:0;
+}
+
+.metric-grid > *,
+.history-summary-grid > *,
+.calendar-summary-grid > *,
+.detail-grid > *,
+.backtest-summary > *,
+.backtest-metrics > *,
+.account-grid > *,
+.diagnostic-grid > *,
+.schedule-inline > *,
+.universe-grid > *{
+  min-width:0;
+  max-width:100%;
+}
+
+/* Prevent long trading values from changing grid geometry. */
+.metric-card strong,
+.detail-grid b,
+.live-trade-row b,
+.trade-row-price b,
+.calendar-time strong,
+.backtest-summary b,
+.backtest-metrics b,
+.account-grid b,
+.diagnostic-grid b{
+  min-width:0;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}/* ---------- Shared control contract -------------------------------------- */
+.secondary-button,
+.primary-button,
+.icon-button,
+.filter-button,
+.impact-filter,
+.trade-tab,
+.signal-tab,
+.history-tab,
+.history-filter,
+.signal-filter,
+.chip-option,
+.appearance-option{
+  box-sizing:border-box;
+  flex:0 0 auto;
+}
+
+.secondary-button,
+.primary-button{
+  min-height:var(--f-control-h);
+}
+
+.icon-button{
+  min-width:var(--f-control-h);
+  min-height:var(--f-control-h);
+}
+
+/* Action rows must wrap instead of forcing cards wider. */
+.section-heading,
+.workspace-heading,
+.page-heading,
+.calendar-agenda-status,
+.backtest-controls{
+  flex-wrap:wrap;
+}
+
+/* ---------- Shared content/list contract --------------------------------- */
+.stack,
+.signals-date-list,
+.history-date-list,
+.history-live-list,
+.calendar-date-list,
+.rule-list,
+.backtest-trades,
+.backtest-signal-list{
+  min-width:0;
+}
+
+.signal-card,
+.trade-card,
+.calendar-item,
+.news-item,
+.live-trade-row,
+.scan-history-row,
+.backtest-trade-row,
+.backtest-signal-list > div{
+  min-width:0;
+  max-width:100%;
+}
+
+/* ---------- Neo geometry safety ------------------------------------------ */
+/* Neo's visual depth must never create accidental layout collisions. */
+html[data-style="neo"] .section-block,
+html[data-style="neo"] .tool-card,
+html[data-style="neo"] .signals-workspace,
+html[data-style="neo"] .history-workspace,
+html[data-style="neo"] .calendar-workspace,
+html[data-style="neo"] .metric-card,
+html[data-style="neo"] .chart-card,
+html[data-style="neo"] .signal-card,
+html[data-style="neo"] .trade-card,
+html[data-style="neo"] .calendar-item{
+  position:relative;
+  isolation:isolate;
+}
+
+/* Reserve the shadow footprint in flow without using negative margins. */
+html[data-style="neo"] .section-block,
+html[data-style="neo"] .tool-card,
+html[data-style="neo"] .signals-workspace,
+html[data-style="neo"] .history-workspace,
+html[data-style="neo"] .calendar-workspace{
+  margin-right:var(--f-neo-depth);
+  margin-bottom:var(--f-neo-depth);
+}
+
+/* ---------- Mobile navigation contract ----------------------------------- */
+@media(max-width:900px){
+  body{
+    padding-bottom:var(--f-mobile-nav-clearance);
+  }
+
+  main{
+    padding-bottom:var(--f-mobile-nav-clearance);
+  }
+
+  .mobile-nav{
+    min-height:var(--f-mobile-nav-h);
+    box-sizing:border-box;
+  }
+}
+
+@media(max-width:760px){
+  :root{
+    --f-section-gap:14px;
+    --f-grid-gap:10px;
+    --f-section-pad:14px;
+    --f-card-pad:11px;
+  }
+
+  .page > * + *{
+    margin-top:var(--f-section-gap);
+  }
+}
+
+@media(max-width:560px){
+  .page > * + *{
+    margin-top:12px;
+  }
+
+  .section-heading,
+  .workspace-heading{
+    gap:8px;
+  }
+
+  .metric-card strong{
+    overflow-wrap:anywhere;
+  }
+}
+
+/* ---------- Compact foundation ------------------------------------------- */
+html[data-compact="true"]{
+  --f-section-gap:12px;
+  --f-grid-gap:8px;
+  --f-section-pad:12px;
+  --f-card-pad:10px;
+}
+
+html[data-compact="true"] .page > * + *{
+  margin-top:var(--f-section-gap);
+}
+
+/* ---------- Reduced motion foundation ------------------------------------ */
+html[data-reduce-motion="true"] .page.active{
+  animation:none!important;
+}
+
+
+/* ---------- Home page contract -------------------------------------------- */
+/* Keep the dashboard's primary metrics stable across themes and widths. */
+#page-overview .metric-grid.four{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:var(--f-grid-gap);
+}
+
+#page-overview .metric-card{
+  min-width:0;
+  overflow:hidden;
+}
+
+#page-overview .metric-card strong{
+  display:block;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums;
+}
+#page-overview .metric-card{
+  display:grid;
+  grid-template-columns:minmax(0,45%) minmax(0,55%);
+  align-items:center;
+  column-gap:6px;
+}
+/* The Home metric tiles are a two-column card (label | value). Below 560px the
+   label is allowed to wrap so nothing is ever ellipsised, but a wide value
+   ("₹4,00,000") steals width from the label column, "ACCOUNT VALUE" wraps, and
+   that tile becomes 40px tall while its row-mates stay at 32px. Reserving the
+   wrapped height on every Home tile keeps the grid's rows the same size. */
+#page-overview .metric-card{
+  min-height:40px;
+}
+#page-overview .metric-card span{
+  max-width:100%;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+#page-overview .metric-card strong{
+  min-width:0;
+  max-width:100%;
+  text-align:right;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+#page-overview .overview-equity .chart-card,
+#page-overview .overview-activity .chart-card{
+  min-width:0;
+  overflow:hidden;
+}
+
+#page-overview .equity-card .chart-area{
+  min-height:220px;
+}
+
+#page-overview .overview-activity .chart-area{
+  min-height:160px;
+}
+
+#page-overview .overview-scan .section-heading{
+  align-items:center;
+}
+
+#page-overview #scanSummary{
+  display:block;
+  max-width:min(100%,720px);
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+
+#page-overview .overview-signals .stack{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--f-card-gap);
+}
+
+#page-overview .overview-signals .empty-state{
+  grid-column:1 / -1;
+}
+
+@media(max-width:900px){
+  #page-overview .metric-grid.four{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  #page-overview .overview-signals .stack{
+    grid-template-columns:1fr;
+  }
+}
+
+@media(max-width:900px){
+  #page-overview .metric-card{grid-template-columns:minmax(0,1fr) auto}
+}
+
+@media(max-width:560px){
+  #page-overview .metric-grid.four{
+    gap:8px;
+  }
+
+
+  #page-overview .equity-card .chart-area{
+    min-height:180px;
+  }
+
+  #page-overview .overview-activity .chart-area{
+    min-height:120px;
+  }
+}
+
+
+/* ---------- Home component repair: dense, data-aware mobile layout --------- */
+#page-overview .overview-activity .chart-area:has(.empty-state){
+  min-height:0!important;
+  height:auto!important;
+  display:block;
+}
+
+#page-overview .overview-activity .chart-area:has(.empty-state) .empty-state{
+  min-height:88px;
+  margin:0;
+  padding:12px;
+}
+
+#page-overview .overview-scan .section-heading{
+  align-items:center;
+}
+
+#page-overview .overview-scan .section-heading h2{
+  white-space:nowrap;
+}
+
+#page-overview .overview-scan #scanSummary{
+  white-space:normal;
+  overflow-wrap:anywhere;
+  text-align:right;
+}
+
+#page-overview .overview-signals .signal-card .card-main{
+  min-height:42px;
+  padding:6px 9px;
+}
+
+#page-overview .overview-signals .signal-leading{
+  gap:9px;
+}
+
+#page-overview .overview-signals .signal-leading strong{
+  font-size:12px;
+}
+
+#page-overview .overview-signals .signal-leading small{
+  margin-top:1px;
+  line-height:1.2;
+}
+
+#page-overview .overview-signals .direction-icon{
+  width:22px;
+  height:22px;
+}
+
+#page-overview .overview-signals .expand-content{
+  padding:4px 8px 9px;
+}
+
+#page-overview .overview-signals .detail-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+  padding-top:6px;
+}
+#page-overview .overview-signals .expand-content{display:block!important;height:auto!important;overflow:visible!important}
+#page-overview .overview-signals .detail-grid>div{min-width:0;width:auto!important;max-width:none!important}
+#page-overview .overview-signals .detail-grid b.fresh,#page-overview .overview-signals .detail-grid b.stale{background:transparent!important;border:0!important;outline:0!important;box-shadow:none!important}
+
+#page-overview .overview-signals .detail-grid>div{
+  padding:7px 8px;
+}
+
+#page-overview .overview-signals .detail-grid b{
+  margin-top:3px;
+  font-size:11.5px;
+}
+
+#page-overview .overview-signals .detail-grid b.fresh,
+#page-overview .overview-signals .detail-grid b.stale{
+  display:inline-flex;
+  width:auto;
+  max-width:100%;
+  padding:2px 6px;
+  border-radius:999px;
+  line-height:1.2;
+}
+
+#page-overview .overview-signals .reason{
+  margin-top:6px;
+  padding:8px 9px;
+}
+
+@media(max-width:560px){
+  #page-overview .overview-scan .section-heading{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+
+  #page-overview .overview-scan .section-heading> :first-child{
+    display:block;
+  }
+
+  #page-overview .overview-scan #scanSummary{
+    text-align:left;
+    justify-self:stretch;
+  }
+
+  #page-overview .overview-signals .signal-leading small{
+    -webkit-line-clamp:2;
+  }
+
+  #page-overview .overview-signals .detail-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media(max-width:380px){
+  #page-overview .overview-signals .detail-grid{
+    gap:5px;
+  }
+
+  #page-overview .overview-signals .detail-grid>div{
+    padding:6px 7px;
+  }
+
+  #page-overview .overview-signals .detail-grid b{
+    font-size:11px;
+  }
+}
+/* ---------- Financial typography contract -------------------------------- */
+/* Financial values use the same compact dashboard font and weight in every theme. */
+#page-overview .metric-card{
+  grid-template-columns:minmax(0,1fr) auto;
+}
+#page-overview .metric-card strong,
+#page-overview .overview-equity .chart-head > span,
+#page-overview .overview-risk .metric-card strong,
+.history-summary-grid .metric-card strong,
+.trade-row-price b,
+.live-trade-row b,
+.drawer-price-grid b,
+.drawer-details b,
+.account-grid b{
+  font-family:var(--font);
+  font-weight:750;
+  font-variant-numeric:tabular-nums;
+}
+#page-overview .metric-card strong{
+  font-size:14px!important;
+  line-height:1.15;
+}
+#page-overview .overview-equity .chart-head > span{
+  font-size:11px;
+  line-height:1.2;
+}
+@media(max-width:760px){
+  #page-overview .metric-card strong,
+  .history-summary-grid .metric-card strong{
+    font-size:14px!important;
+  }
+}
+/* ---------- Mobile chart density ----------------------------------------- */
+@media(max-width:560px){
+  #page-overview .overview-activity .chart-area{
+    min-height:0!important;
+    height:128px;
+  }
+  #page-overview .overview-activity .chart-area svg{
+    width:100%;
+    height:128px;
+  }
+  #page-overview .overview-equity .equity-card .chart-area{
+    min-height:160px;
+    height:160px;
+  }
+  #page-overview .overview-equity .equity-card .chart-area svg{
+    width:100%;
+    height:160px;
+  }
+}
+
+
+/* ---------- Mobile visual repair: preserve Neo, fix text + chart geometry ---- */
+/* Keep Neo's strong borders/shadows intact. These rules only repair content
+   fitting and remove whitespace caused by inline SVG dimensions. */
+@media(max-width:560px){
+  #page-overview .metric-card span{
+    max-width:none;
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+    line-height:1.1;
+    letter-spacing:.06em;
+  }
+
+  #page-overview .metric-card{
+    grid-template-columns:minmax(0,1fr) max-content;
+  }
+
+  #page-overview .overview-activity .chart-area{
+    min-height:0!important;
+    height:128px!important;
+  }
+
+  #page-overview .overview-activity .chart-area svg{
+    width:100%!important;
+    height:128px!important;
+    max-height:128px!important;
+  }
+
+  #page-overview .overview-equity .equity-card .chart-area{
+    min-height:0!important;
+    height:160px!important;
+  }
+
+  #page-overview .overview-equity .equity-card .chart-area svg{
+    width:100%!important;
+    height:160px!important;
+    max-height:160px!important;
+  }
+}
+
+
+/* ---------- Financial type refinement: keep Neo bold, improve hierarchy ----- */
+/* Neo remains visually dominant; financial values use a controlled weight so
+   numbers do not overpower their labels or surrounding content. */
+#page-overview .metric-card strong,
+#page-overview .overview-equity .chart-head > span,
+#page-overview .overview-risk .metric-card strong,
+.history-summary-grid .metric-card strong,
+.trade-row-price b,
+.live-trade-row b,
+.drawer-price-grid b,
+.drawer-details b,
+.account-grid b{
+  font-weight:800;
+  letter-spacing:-.018em;
+}
+
+html[data-style="neo"] #page-overview .metric-card strong,
+html[data-style="neo"] #page-overview .overview-equity .chart-head > span,
+html[data-style="neo"] #page-overview .overview-risk .metric-card strong{
+  font-weight:800!important;
+}
+
+
+/* ---------- Signals page contract ----------------------------------------- */
+/* Keep Neo's full visual weight while giving the ledger a predictable mobile
+   hierarchy: workspace -> date group -> signal card -> expanded details. */
+#page-signals .signals-workspace{
+  min-width:0;
+}
+
+#page-signals .signals-date-list{
+  min-width:0;
+}
+
+#page-signals .signal-date-group{
+  min-width:0;
+}
+
+#page-signals .signal-date-toggle{
+  min-width:0;
+}
+
+#page-signals .signal-date-toggle > span{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+#page-signals .signal-date-toggle b{
+  overflow-wrap:anywhere;
+}
+
+#page-signals .signal-date-rows .signal-card{
+  min-width:0;
+}
+
+#page-signals .signal-leading{
+  min-width:0;
+  flex:1 1 auto;
+}
+
+#page-signals .signal-leading > div{
+  min-width:0;
+}
+
+#page-signals .signal-leading small{
+  overflow-wrap:anywhere;
+}
+
+@media(max-width:560px){
+  #page-signals .signals-date-list{
+    padding:6px 8px 10px;
+  }
+
+  #page-signals .signal-date-toggle{
+    min-height:44px;
+    padding:8px 6px;
+  }
+
+  #page-signals .signal-date-toggle i{
+    width:32px;
+    height:32px;
+  }
+
+  #page-signals .signal-date-rows{
+    padding:7px 3px 9px;
+    gap:8px;
+  }
+
+  #page-signals .signal-date-rows .signal-card .card-main{
+    min-height:52px;
+    padding:8px 9px;
+  }
+
+  #page-signals .signal-date-rows .signal-leading{
+    gap:9px;
+  }
+
+  #page-signals .signal-date-rows .signal-leading strong{
+    font-size:12.5px;
+  }
+
+  #page-signals .signal-date-rows .signal-leading small{
+    font-size:10.5px;
+    line-height:1.35;
+  }
+
+  #page-signals .signal-date-rows .detail-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:7px;
+  }
+
+  #page-signals .signal-date-rows .reason{
+    margin-top:8px;
+  }
+}
+
+/* Neo date groups/cards keep the same strong treatment as the rest of Neo. */
+html[data-style="neo"] #page-signals .signal-date-rows .signal-card{
+  border:2px solid var(--line-strong)!important;
+  border-left-width:4px!important;
+  border-radius:8px!important;
+  box-shadow:3px 3px 0 var(--line-strong)!important;
+}
+
+
+/* ---------- Signals mobile action polish ---------------------------------- */
+/* Keep the page structure intact; only reduce the refresh control footprint. */
+@media(max-width:560px){
+  #page-signals .signals-heading{
+    align-items:flex-end;
+  }
+
+  #page-signals #signalsRefreshButton{
+    width:auto;
+    min-width:92px;
+    min-height:40px;
+    padding:8px 12px;
+    flex:0 0 auto;
+  }
+
+  #page-signals .signals-heading > div{
+    min-width:0;
+  }
+
+  #page-signals .signals-heading p{
+    max-width:30rem;
+  }
+}
+
+
+/* ---------- Signals date header card -------------------------------------- */
+/* The date row is a nested information surface, not a full-width divider.
+   Give it the same contained-card language as the signal rows. */
+#page-signals .signal-date-group{
+  border-bottom:0;
+  margin:0 0 8px;
+}
+
+#page-signals .signal-date-toggle{
+  width:calc(100% - 10px);
+  min-width:0;
+  margin:6px 5px 0;
+  padding:9px 10px;
+  min-height:46px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--surface-2);
+  box-shadow:var(--shadow-soft);
+}
+
+#page-signals .signal-date-group.is-open > .signal-date-toggle{
+  background:var(--accent-softer);
+  border-color:var(--line);
+  border-radius:var(--radius-sm);
+}
+
+#page-signals .signal-date-toggle i{
+  border-radius:8px;
+}
+
+#page-signals .signal-date-rows{
+  padding:7px 5px 3px;
+}
+
+@media(max-width:560px){
+  #page-signals .signal-date-toggle{
+    width:calc(100% - 6px);
+    margin:5px 3px 0;
+    padding:8px 9px;
+    min-height:46px;
+  }
+
+  #page-signals .signal-date-rows{
+    padding:7px 3px 3px;
+  }
+}
+
+/* Neo keeps its strong personality: the date header gets the same deliberate
+   border/shadow language as the other Neo cards. */
+html[data-style="neo"] #page-signals .signal-date-toggle{
+  border:2px solid var(--line-strong)!important;
+  border-radius:8px!important;
+  box-shadow:3px 3px 0 var(--line-strong)!important;
+}
+
+
+/* ---------- Signals heading alignment repair ------------------------------ */
+/* Mobile page headings stack vertically. Keep the heading block on the
+   content edge; only the action stays compact. */
+@media(max-width:760px){
+  #page-signals .signals-heading{
+    align-items:flex-start!important;
+  }
+
+  #page-signals #signalsRefreshButton{
+    width:auto!important;
+    align-self:flex-start;
+  }
+}
+
+
+/* ---------- Signals mobile final geometry -------------------------------- */
+/* Keep the page heading and action on one row. The generic mobile page-heading
+   rule stacks actions for other pages, but Signals has a single compact action. */
+@media(max-width:560px){
+  #page-signals .signals-heading{
+    width:100%;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:end!important;
+    gap:10px;
+  }
+
+  #page-signals .signals-heading > div{
+    min-width:0;
+  }
+
+  #page-signals #signalsRefreshButton{
+    width:auto!important;
+    min-width:92px;
+    min-height:40px;
+    margin:0;
+    align-self:end;
+    justify-self:end;
+  }
+
+  /* Fixed bottom navigation must never cover expanded signal details. */
+  #page-signals{
+    padding-bottom:104px;
+  }
+
+  #page-signals .signals-workspace{
+    margin-bottom:0;
+  }
+}
+
+
+/* ---------- Expanded signal detail groups -------------------------------- */
+/* Two compact information surfaces instead of eleven independent cards. */
+#page-signals .detail-groups{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  padding-top:8px;
+}
+
+#page-signals .detail-group{
+  min-width:0;
+  padding:8px 9px;
+  background:var(--surface-2);
+  border:1px solid var(--line);
+  border-radius:var(--radius-xs);
+}
+
+#page-signals .detail-group > div{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:baseline;
+  gap:8px;
+  padding:4px 0;
+}
+
+#page-signals .detail-group > div + div{
+  border-top:1px solid color-mix(in srgb,var(--line) 65%,transparent);
+}
+
+#page-signals .detail-group span{
+  color:var(--muted);
+  font-size:9.5px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.07em;
+}
+
+#page-signals .detail-group b{
+  margin:0;
+  font-size:11.5px;
+  text-align:right;
+  overflow-wrap:anywhere;
+}
+
+#page-signals .detail-group b.fresh,
+#page-signals .detail-group b.stale{
+  padding:1px 5px;
+  border-radius:999px;
+  line-height:1.2;
+}
+
+#page-signals .reason{
+  margin-top:8px;
+  padding:8px 9px;
+}
+
+#page-signals .reason p{
+  margin-top:4px;
+  font-size:11px;
+  line-height:1.4;
+}
+
+@media(max-width:560px){
+  #page-signals .detail-groups{
+    grid-template-columns:1fr;
+    gap:6px;
+    padding-top:7px;
+  }
+
+  #page-signals .detail-group{
+    padding:6px 8px;
+  }
+
+  #page-signals .detail-group > div{
+    padding:3px 0;
+  }
+
+  #page-signals .detail-group b{
+    font-size:11px;
+  }
+
+  #page-signals .reason{
+    margin-top:6px;
+  }
+}
+
+html[data-style="neo"] #page-signals .detail-group{
+  border:2px solid var(--line-strong)!important;
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+
+/* ---------- Expanded signal details: compact two-surface treatment ------- */
+/* Keep the known-good markup. The whole detail grid is one contained surface;
+   strategy reason is the second surface. No JS restructuring required. */
+#page-signals .signal-card .expand-content{
+  padding:7px 9px 9px;
+}
+
+#page-signals .signal-card .detail-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0;
+  padding:0;
+  border:1px solid var(--line);
+  border-radius:var(--radius-xs);
+  background:var(--surface-2);
+  overflow:hidden;
+}
+
+#page-signals .signal-card .detail-grid>div{
+  padding:6px 8px;
+  background:transparent;
+  border-radius:0;
+  min-width:0;
+}
+
+#page-signals .signal-card .detail-grid b{
+  margin-top:2px;
+  font-size:11px;
+}
+
+#page-signals .signal-card .reason{
+  margin-top:7px;
+  padding:7px 8px;
+}
+
+#page-signals .signal-card .reason p{
+  margin:4px 0 0;
+  font-size:11px;
+  line-height:1.4;
+}
+
+@media(max-width:560px){
+  #page-signals .signal-card .detail-grid{
+    grid-template-columns:1fr 1fr;
+  }
+
+  #page-signals .signal-card .detail-grid>div{
+    padding:5px 7px;
+  }
+
+  #page-signals .signal-card .detail-grid b{
+    font-size:10.5px;
+  }
+}
+
+html[data-style="neo"] #page-signals .signal-card .detail-grid{
+  border:2px solid var(--line-strong)!important;
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+
+/* ---------- Signal detail density ----------------------------------------- */
+#page-signals .signal-card .detail-grid{
+  border-radius:var(--radius-xs);
+}
+
+#page-signals .signal-card .detail-grid>div{
+  padding:4px 8px;
+}
+
+#page-signals .signal-card .detail-grid span{
+  line-height:1.1;
+}
+
+#page-signals .signal-card .detail-grid b{
+  margin-top:1px;
+  line-height:1.2;
+}
+
+#page-signals .signal-card .reason{
+  margin-top:6px;
+  padding:6px 8px;
+}
+
+#page-signals .signal-card .reason p{
+  margin-top:3px;
+  line-height:1.3;
+}
+
+@media(max-width:560px){
+  #page-signals .signal-card .detail-grid>div{
+    padding:4px 7px;
+  }
+
+  #page-signals .signal-card .detail-grid b{
+    font-size:10.5px;
+  }
+}
+
+
+/* ---------- Signals expanded panel: final compact Neo treatment ------------ */
+/* CSS-only: do not alter signal rendering, API, navigation, or dashboard JS. */
+#page-signals .signal-card.expanded .expand-content{
+  padding:6px 8px 8px;
+}
+
+#page-signals .signal-card.expanded .reason{
+  margin:6px 0 0;
+  padding:6px 8px;
+  border-radius:10px;
+}
+
+#page-signals .signal-card.expanded .reason span{
+  font-size:9px;
+  line-height:1.05;
+}
+
+#page-signals .signal-card.expanded .reason p{
+  margin:3px 0 0;
+  font-size:10.5px;
+  line-height:1.25;
+}
+
+@media(max-width:560px){
+  #page-signals .signal-card.expanded .expand-content{
+    padding:5px 7px 7px;
+  }
+
+  #page-signals .signal-card.expanded .reason{
+    margin-top:5px;
+    padding:5px 7px;
+  }
+}
+
+html[data-style="neo"] #page-signals .signal-card.expanded .detail-grid{
+  border:2px solid var(--line-strong)!important;
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+html[data-style="neo"] #page-signals .signal-card.expanded .reason{
+  border:2px solid var(--line-strong)!important;
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+
+/* ---------- Shared expanded-signal detail contract ------------------------ */
+/* Keep Home and Signals on the same compact information geometry.
+
+   This block used to carry the gap, padding, border and radius of the detail
+   grid and its cells, plus the cell hairlines. All of those were superseded:
+   the surface treatment is owned by the appearance layer, and the cells are
+   now separated by a gap on a grey gutter rather than by positional lines. The
+   declarations that still win are the ones kept here -- the grid's own frame
+   and clipping. Anything re-added below to "fix" one of the retired values
+   would be silently overridden again. */
+#page-overview .overview-signals .signal-card.expanded .expand-content,
+#page-signals .signal-card.expanded .expand-content{
+  padding:5px 7px 7px;
+}
+
+#page-overview .overview-signals .signal-card.expanded .detail-grid,
+#page-signals .signal-card.expanded .detail-grid{
+  overflow:hidden;
+}
+
+#page-overview .overview-signals .signal-card.expanded .detail-grid>div,
+#page-signals .signal-card.expanded .detail-grid>div{
+  min-width:0;
+}
+
+#page-overview .overview-signals .signal-card.expanded .reason,
+#page-signals .signal-card.expanded .reason{
+  margin:5px 0 0;
+  padding:6px 7px;
+  border-radius:9px;
+}
+
+#page-overview .overview-signals .signal-card.expanded .reason span,
+#page-signals .signal-card.expanded .reason span{
+  font-size:9px;
+  line-height:1.05;
+}
+
+#page-overview .overview-signals .signal-card.expanded .reason p,
+#page-signals .signal-card.expanded .reason p{
+  margin:3px 0 0;
+  font-size:10.5px;
+  line-height:1.2;
+}
+
+html[data-style="neo"] #page-overview .overview-signals .signal-card.expanded .detail-grid,
+html[data-style="neo"] #page-signals .signal-card.expanded .detail-grid{
+  border:2px solid var(--line-strong)!important;
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+html[data-style="neo"] #page-overview .overview-signals .signal-card.expanded .reason,
+html[data-style="neo"] #page-signals .signal-card.expanded .reason{
+  border:2px solid var(--line-strong)!important;
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+@media(max-width:560px){
+  #page-overview .overview-signals .signal-card.expanded .detail-grid,
+  #page-signals .signal-card.expanded .detail-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+
+/* ---------- Expanded signal detail grid: one definition -------------------- */
+/* One information surface, two columns. Labels and values share a row so the
+   panel uses horizontal space instead of stacking every field vertically.
+   Applies to Home and Signals; data/markup remain unchanged.
+
+   This is the single definition of the expanded grid's geometry and type. It
+   used to be written as three successive passes -- "shared contract", "compact
+   readable rows", then "final readability polish" -- each restating the
+   properties the one before had set, so the value that actually rendered was
+   whichever pass happened to come last rather than the one anybody decided on.
+   The three are merged here and the two later passes are gone.
+
+   Where a pass only restated a value, the surviving declaration is unchanged.
+   Where they disagreed, the later value won and is what is declared here:
+   min-height 30 -> 31, value font-size 10.5 -> 11, value line-height 1.15 ->
+   1.2, and at 560px min-height 28 -> 30, cell padding 4px 7px -> 5px 7px,
+   label font-size 8 -> 9.5, value font-size 10 -> 10.5.
+
+   The grid's border, radius and background are NOT set here. Neo declares a
+   2px border on this element further up in this file, and the appearance layer
+   only beats it because its `html` prefix matches Neo's specificity and it
+   loads later. Moving those declarations here would hand the border back to
+   Neo, so the appearance layer keeps sole ownership of the surface. */
+#page-overview .overview-signals .signal-card.expanded .detail-grid,
+#page-signals .signal-card.expanded .detail-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-auto-rows:minmax(0,auto);
+  align-items:stretch;
+  font-size:inherit;
+}
+
+#page-overview .overview-signals .signal-card.expanded .detail-grid>div,
+#page-signals .signal-card.expanded .detail-grid>div{
+  display:grid!important;
+  grid-template-columns:max-content minmax(0,1fr);
+  align-items:center;
+  column-gap:8px;
+  min-height:31px;
+  padding:5px 8px!important;
+}
+
+#page-overview .overview-signals .signal-card.expanded .detail-grid span,
+#page-signals .signal-card.expanded .detail-grid span{
+  display:block;
+  margin:0!important;
+  white-space:nowrap;
+  font-size:8.5px!important;
+  line-height:1.1!important;
+  letter-spacing:.055em;
+  text-transform:uppercase;
+}
+
+#page-overview .overview-signals .signal-card.expanded .detail-grid b,
+#page-signals .signal-card.expanded .detail-grid b{
+  min-width:0;
+  margin:0!important;
+  font-size:11px!important;
+  line-height:1.2!important;
+  text-align:right;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  overflow-wrap:anywhere;
+}
+
+#page-overview .overview-signals .signal-card.expanded .detail-grid b.fresh,
+#page-overview .overview-signals .signal-card.expanded .detail-grid b.stale,
+#page-signals .signal-card.expanded .detail-grid b.fresh,
+#page-signals .signal-card.expanded .detail-grid b.stale{
+  justify-self:end;
+  width:max-content;
+  max-width:100%;
+  padding:1px 5px;
+  text-align:center;
+}
+
+#page-overview .overview-signals .signal-card.expanded .reason,
+#page-signals .signal-card.expanded .reason{
+  display:grid;
+  grid-template-columns:max-content minmax(0,1fr);
+  align-items:center;
+  column-gap:10px;
+  min-height:30px;
+  margin:5px 0 0!important;
+  padding:6px 8px!important;
+}
+
+#page-overview .overview-signals .signal-card.expanded .reason span,
+#page-signals .signal-card.expanded .reason span{
+  white-space:nowrap;
+  margin:0!important;
+  font-size:8.5px!important;
+}
+
+#page-overview .overview-signals .signal-card.expanded .reason p,
+#page-signals .signal-card.expanded .reason p{
+  min-width:0;
+  margin:0!important;
+  font-size:10.5px!important;
+  line-height:1.2!important;
+}
+
+html[data-style="neo"] #page-overview .overview-signals .signal-card.expanded .detail-grid,
+html[data-style="neo"] #page-signals .signal-card.expanded .detail-grid{
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+html[data-style="neo"] #page-overview .overview-signals .signal-card.expanded .reason,
+html[data-style="neo"] #page-signals .signal-card.expanded .reason{
+  box-shadow:2px 2px 0 var(--line-strong)!important;
+}
+
+@media(max-width:560px){
+  #page-overview .overview-signals .signal-card.expanded .detail-grid>div,
+  #page-signals .signal-card.expanded .detail-grid>div{
+    min-height:30px;
+    padding:5px 7px!important;
+    grid-template-columns:max-content minmax(0,1fr);
+    column-gap:6px;
+  }
+
+  #page-overview .overview-signals .signal-card.expanded .detail-grid span,
+  #page-signals .signal-card.expanded .detail-grid span{
+    font-size:9.5px!important;
+  }
+
+  #page-overview .overview-signals .signal-card.expanded .detail-grid b,
+  #page-signals .signal-card.expanded .detail-grid b{
+    font-size:10.5px!important;
+  }
+
+  #page-overview .overview-signals .signal-card.expanded .reason,
+  #page-signals .signal-card.expanded .reason{
+    grid-template-columns:max-content minmax(0,1fr);
+    min-height:28px;
+    padding:5px 7px!important;
+  }
+
+  #page-overview .overview-signals .signal-card.expanded .reason span,
+  #page-signals .signal-card.expanded .reason span{
+    font-size:8px!important;
+  }
+
+  #page-overview .overview-signals .signal-card.expanded .reason p,
+  #page-signals .signal-card.expanded .reason p{
+    font-size:10px!important;
+  }
+}
+
+
+/* ---------- Expanded signal detail grid: positional exceptions -------------- */
+/* These are not a restatement of the grid above: each one is about a specific
+   cell, and none of them could be folded into the shared rule without
+   changing every other cell. The "final readability polish" pass that used to
+   sit here declared four properties a second time and was removed; what
+   remained unique to it is these three rules. */
+
+/* Timestamp fields are allowed to wrap instead of being clipped with "...". */
+#page-overview .overview-signals .signal-card.expanded .detail-grid>div:nth-child(6) b,
+#page-signals .signal-card.expanded .detail-grid>div:nth-child(6) b{
+  white-space:normal;
+  overflow:visible;
+  text-overflow:clip;
+  overflow-wrap:anywhere;
+}
+
+/* FIRST SENT has no useful partner on the final row, so use the full width. */
+#page-overview .overview-signals .signal-card.expanded .detail-grid>div:nth-child(11),
+#page-signals .signal-card.expanded .detail-grid>div:nth-child(11){
+  grid-column:1 / -1;
+  grid-template-columns:max-content minmax(0,1fr);
+}
+
+@media(max-width:560px){
+  #page-overview .overview-signals .signal-card.expanded .detail-grid>div:nth-child(6) b,
+  #page-signals .signal-card.expanded .detail-grid>div:nth-child(6) b{
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+}
+
+
+/* ---------- History page contract ----------------------------------------- */
+/* Reuse the proven Signals hierarchy: workspace -> date group -> compact row.
+   No runtime/data styling belongs in the history renderer. */
+#page-history .history-summary-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:var(--f-grid-gap);
+}
+#page-history .history-summary-grid .metric-card{
+  min-width:0;
+}
+#page-history .history-workspace{
+  overflow:visible;
+}
+#page-history .history-date-list{
+  padding:6px 12px 12px;
+}
+#page-history .history-date-group{
+  min-width:0;
+  margin:0;
+  border-bottom:0;
+}
+#page-history .history-date-rows{
+  display:grid;
+  gap:8px;
+  padding:7px 5px 9px;
+}
+#page-history .history-date-rows .trade-row{
+  min-width:0;
+}
+#page-history .history-live-list{
+  display:grid;
+  gap:8px;
+  padding:8px 12px 12px;
+}
+#page-history .history-live-list .live-trade-row,
+#page-history .history-live-list .scan-history-row{
+  min-width:0;
+  max-width:100%;
+}
+#page-history .history-scan-workspace .history-live-list{
+  padding-top:7px;
+}
+@media(max-width:760px){
+  #page-history .history-summary-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+@media(max-width:560px){
+  #page-history .history-date-list{
+    padding:6px 8px 10px;
+  }
+  #page-history .history-date-rows{
+    gap:8px;
+    padding:7px 3px 9px;
+  }
+  #page-history .history-live-list{
+    gap:8px;
+    padding:7px 8px 10px;
+  }
+  #page-history .history-live-list .live-trade-row{
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:6px 8px;
+    padding:8px 9px;
+  }
+  #page-history .history-live-list .live-trade-row > div:first-child{
+    grid-column:1 / -1;
+  }
+  #page-history .history-live-list .live-trade-row > div:nth-child(2),
+  #page-history .history-live-list .live-trade-row > div:nth-child(3){
+    min-width:0;
+  }
+  #page-history .history-live-list .live-trade-row .live-open-badge{
+    grid-column:1;
+    justify-self:start;
+    align-self:center;
+  }
+  #page-history .history-live-list .live-trade-row .trade-detail-button{
+    grid-column:2;
+    justify-self:end;
+  }
+  #page-history .history-scan-workspace .history-live-list{
+    padding:7px 8px 10px;
+  }
+}
+
+
+/* ---------- History final mobile geometry -------------------------------- */
+#page-history .history-summary-grid .metric-card{
+  grid-template-columns:minmax(0,1fr) minmax(64px,auto);
+  align-items:center;
+}
+#page-history .history-summary-grid .metric-card strong{
+  white-space:nowrap;
+  overflow:visible;
+  word-break:normal;
+  overflow-wrap:normal;
+  text-align:right;
+  font-size:14px!important;
+}
+@media(max-width:560px){
+  #page-history .history-summary-grid .metric-card{
+    grid-template-columns:minmax(0,1fr) minmax(66px,auto);
+    gap:7px;
+    padding-inline:9px;
+  }
+  #page-history .history-summary-grid .metric-card strong{
+    font-size:13.5px!important;
+  }
+}
+
+
+/* ---------- History polish: summary + scan rows -------------------------- */
+#page-history .history-summary-grid .metric-card{
+  grid-template-columns:minmax(0,1fr) max-content;
+}
+#page-history .history-summary-grid .metric-card strong{
+  display:block;
+  min-width:max-content!important;
+  max-width:none!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+  text-align:right;
+  font-size:14px!important;
+  line-height:1.1;
+}
+#page-history .history-scan-workspace .history-date-rows{gap:7px}
+#page-history .history-scan-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:8px;
+  padding:10px 11px;
+  border:var(--border-w) solid var(--line);
+  border-left:3px solid var(--accent);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  box-shadow:var(--shadow-soft);
+}
+#page-history .history-scan-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) max-content;
+  align-items:start;
+  gap:8px;
+  min-width:0;
+}
+#page-history .history-scan-identity{min-width:0}
+#page-history .history-scan-identity strong{
+  display:block;
+  min-width:0;
+  font-size:12px;
+  line-height:1.25;
+  font-weight:850;
+  overflow-wrap:anywhere;
+}
+#page-history .history-scan-identity small{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.3;
+}
+#page-history .history-scan-status{
+  display:inline-flex!important;
+  align-items:center;
+  justify-content:center;
+  padding:4px 8px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:var(--surface-2);
+  color:var(--muted)!important;
+  font-size:9px!important;
+  font-weight:900;
+  letter-spacing:.06em;
+  white-space:nowrap;
+  text-transform:uppercase;
+}
+#page-history .history-scan-metrics{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:5px;
+  min-width:0;
+}
+#page-history .history-scan-metrics span{
+  min-width:0;
+  padding:6px 5px;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:var(--surface-2);
+  color:var(--muted);
+  font-size:9.5px;
+  line-height:1.2;
+  text-align:center;
+  white-space:nowrap;
+}
+#page-history .history-scan-metrics b{
+  color:var(--text);
+  font-size:10.5px;
+  font-weight:850;
+  font-variant-numeric:tabular-nums;
+}
+@media(max-width:560px){
+  #page-history .history-summary-grid .metric-card{
+    grid-template-columns:minmax(0,1fr) max-content;
+    gap:6px;
+  }
+  #page-history .history-summary-grid .metric-card strong{font-size:13px!important}
+  #page-history .history-scan-row{padding:9px}
+  #page-history .history-scan-metrics{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+  #page-history .history-scan-metrics span{padding:6px 3px;font-size:8.5px}
+  #page-history .history-scan-metrics b{font-size:10px}
+}
+
+
+/* ---------- History final contract ---------------------------------------- */
+/* History owns its data once; this layer only controls compact geometry. */
+#page-history .history-summary-grid{
+  align-items:stretch;
+}
+#page-history .history-summary-grid .metric-card{
+  grid-template-columns:minmax(0,1fr) max-content;
+  gap:8px;
+  padding:8px 10px;
+}
+#page-history .history-summary-grid .metric-card span{
+  min-width:0;
+  max-width:none;
+  white-space:nowrap;
+}
+#page-history .history-summary-grid .metric-card strong{
+  min-width:max-content!important;
+  max-width:none!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+  font-size:13.5px!important;
+  line-height:1.1;
+}
+#page-history .history-date-list{
+  padding:4px 10px 10px;
+}
+#page-history .history-date-rows{
+  gap:6px;
+  padding:6px 3px 8px;
+}
+#page-history .history-live-list{
+  gap:6px;
+  padding:6px 10px 10px;
+}
+#page-history .history-empty-state{
+  min-height:76px;
+  padding:10px 12px;
+  gap:3px;
+}
+#page-history .history-empty-state span{
+  font-size:14px;
+  line-height:1;
+}
+#page-history .history-empty-state strong{
+  font-size:12.5px;
+}
+#page-history .history-empty-state small{
+  font-size:10.5px;
+  line-height:1.35;
+}
+#page-history .history-scan-workspace .history-date-rows{
+  gap:6px;
+  padding:6px 3px 8px;
+}
+#page-history .history-scan-row{
+  gap:6px;
+  padding:8px 9px;
+}
+#page-history .history-scan-head{
+  gap:6px;
+}
+#page-history .history-scan-identity strong{
+  font-size:11.5px;
+}
+#page-history .history-scan-identity small{
+  margin-top:2px;
+  font-size:9.5px;
+}
+#page-history .history-scan-status{
+  padding:3px 7px;
+  font-size:8.5px!important;
+}
+#page-history .history-scan-metrics{
+  gap:4px;
+}
+#page-history .history-scan-metrics span{
+  padding:4px 3px;
+  font-size:8.5px;
+}
+#page-history .history-scan-metrics b{
+  font-size:10px;
+}
+@media(max-width:560px){
+  #page-history .history-summary-grid .metric-card{
+    gap:5px;
+    padding:8px 9px;
+  }
+  #page-history .history-summary-grid .metric-card strong{
+    font-size:13px!important;
+  }
+  #page-history .history-date-list{
+    padding:3px 7px 8px;
+  }
+  #page-history .history-live-list{
+    padding:5px 7px 8px;
+  }
+  #page-history .history-scan-row{
+    padding:8px;
+  }
+  #page-history .history-scan-metrics{
+    gap:3px;
+  }
+  #page-history .history-scan-metrics span{
+    padding:4px 2px;
+    font-size:8px;
+  }
+}
+
+
+/* ---------- History heading parity ---------------------------------------- */
+/* History uses the same compact page-heading contract as Signals.
+   The refresh action must stay beside the title instead of becoming a
+   full-width second row. */
+@media(max-width:560px){
+  #page-history .history-heading{
+    width:100%;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:end!important;
+    gap:10px;
+    flex-wrap:nowrap!important;
+  }
+
+  #page-history .history-heading > div{
+    min-width:0;
+  }
+
+  #page-history #historyRefreshButton{
+    width:auto!important;
+    min-width:92px;
+    min-height:40px;
+    margin:0;
+    align-self:end;
+    justify-self:end;
+    flex:0 0 auto;
+  }
+}
+
+@media(max-width:760px){
+  #page-history .history-heading{
+    align-items:flex-start;
+  }
+
+  #page-history #historyRefreshButton{
+    width:auto!important;
+    align-self:flex-start;
+  }
+}
+
+@media(max-width:560px){
+  #page-history .history-heading{
+    align-items:end!important;
+  }
+
+  #page-history #historyRefreshButton{
+    align-self:end;
+  }
+}
+
+
+/* ---------- History date header parity with Signals ----------------------- */
+/* Date groups use the same contained card treatment on both ledgers. */
+#page-history .history-date-group{
+  border-bottom:0;
+  margin:0 0 8px;
+}
+
+#page-history .history-date-toggle{
+  width:calc(100% - 10px);
+  min-width:0;
+  margin:6px 5px 0;
+  padding:9px 10px;
+  min-height:46px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--surface-2);
+  box-shadow:var(--shadow-soft);
+}
+
+#page-history .history-date-group.is-open > .history-date-toggle{
+  background:var(--accent-softer);
+  border-color:var(--line);
+  border-radius:var(--radius-sm);
+}
+
+#page-history .history-date-toggle > span{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+#page-history .history-date-toggle b{
+  overflow-wrap:anywhere;
+}
+
+#page-history .history-date-toggle i{
+  border-radius:8px;
+}
+
+@media(max-width:560px){
+  #page-history .history-date-list{
+    padding:6px 8px 10px;
+  }
+
+  #page-history .history-date-toggle{
+    width:calc(100% - 6px);
+    margin:5px 3px 0;
+    padding:8px 9px;
+    min-height:46px;
+  }
+
+  #page-history .history-date-toggle i{
+    width:32px;
+    height:32px;
+  }
+
+  #page-history .history-date-rows{
+    padding:7px 3px 9px;
+  }
+}
+
+html[data-style="neo"] #page-history .history-date-toggle{
+  border:2px solid var(--line-strong)!important;
+  border-radius:8px!important;
+  box-shadow:3px 3px 0 var(--line-strong)!important;
+}
+
+/* ---------- History scan density final ------------------------------------ */
+#page-history .history-scan-workspace .history-date-rows{
+  gap:5px;
+  padding:5px 3px 7px;
+}
+#page-history .history-scan-row{
+  gap:6px;
+  padding:6px 8px;
+}
+#page-history .history-scan-head{
+  gap:5px;
+}
+#page-history .history-scan-identity strong{
+  font-size:11px;
+  line-height:1.2;
+}
+#page-history .history-scan-identity small{
+  margin-top:1px;
+  font-size:9px;
+  line-height:1.2;
+}
+#page-history .history-scan-status{
+  padding:3px 7px;
+  font-size:8px!important;
+}
+#page-history .history-scan-metrics{
+  gap:3px;
+}
+#page-history .history-scan-metrics span{
+  padding:3px 2px;
+  font-size:8px;
+  line-height:1.1;
+}
+#page-history .history-scan-metrics b{
+  font-size:9.5px;
+}
+@media(max-width:560px){
+  #page-history .history-scan-row{
+    padding:6px 7px;
+  }
+  #page-history .history-scan-metrics{
+    gap:3px;
+  }
+  #page-history .history-scan-metrics span{
+    padding:3px 1px;
+    font-size:9.5px;
+  }
+  #page-history .history-scan-metrics b{
+    font-size:9px;
+  }
+}
+
+/* ---------- History / trade detail parity -------------------------------- */
+/* Match History's outer surface to the same contained-card contract as Signals.
+   overflow:hidden is intentional: the workspace radius must clip its header background. */
+#page-history .history-workspace{
+  overflow:hidden;
+}
+#page-history .history-workspace .workspace-heading{
+  border-top-left-radius:inherit;
+  border-top-right-radius:inherit;
+}
+
+/* Trade detail is the same information surface as an expanded Signal:
+   compact header, compact 2-column facts, no oversized modal geometry. */
+.trade-drawer{
+  box-sizing:border-box;
+  padding:18px 18px 20px;
+}
+.trade-drawer h2{
+  margin:5px 0 9px;
+  font-size:17px;
+}
+.trade-drawer .drawer-status{
+  margin-bottom:12px;
+}
+.trade-drawer .drawer-price-grid,
+.trade-drawer .drawer-details{
+  gap:7px;
+}
+.trade-drawer .drawer-price-grid>div,
+.trade-drawer .drawer-details>div{
+  padding:8px 9px;
+  border-radius:var(--radius-xs);
+}
+.trade-drawer .drawer-price-grid b,
+.trade-drawer .drawer-details b{
+  margin-top:4px;
+  font-size:12px;
+  line-height:1.25;
+}
+.trade-drawer section{
+  margin-top:16px;
+}
+.trade-drawer h3{
+  margin:0 0 8px;
+  font-size:12.5px;
+}
+@media(max-width:760px){
+  .trade-drawer{
+    height:auto;
+    max-height:88vh;
+    padding:16px 16px 18px;
+    border:var(--border-w) solid var(--line);
+    border-bottom:0;
+  }
+  .drawer-close{
+    top:10px;
+    right:10px;
+    width:36px;
+    height:36px;
+    font-size:17px;
+  }
+}
+@media(max-width:560px){
+  .trade-drawer h2{
+    font-size:17px;
+  }
+  .trade-drawer .drawer-price-grid>div,
+  .trade-drawer .drawer-details>div{
+    padding:8px;
+  }
+}
+
+
+/* ---------- Calendar parity contract -------------------------------------- */
+/* Calendar keeps its existing data/rendering contract, but uses the same
+   contained surfaces and responsive geometry already proven on Signals/History. */
+#page-calendar .calendar-agenda-workspace{
+  overflow:hidden;
+}
+
+#page-calendar .calendar-agenda-status{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  padding:10px 14px;
+  min-width:0;
+}
+
+#page-calendar .calendar-status{
+  min-width:0;
+}
+
+#page-calendar .calendar-status .inline-status{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  width:100%;
+  min-width:0;
+  padding:7px 10px;
+  white-space:normal;
+}
+
+#page-calendar .calendar-status .inline-status b{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+
+#page-calendar .calendar-status .inline-status small{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+#page-calendar .calendar-source{
+  flex:0 0 auto;
+  min-height:36px;
+  padding:6px 8px;
+}
+
+#page-calendar .calendar-summary-grid{
+  padding:0 0 0;
+  gap:var(--f-grid-gap, var(--grid-gap));
+}
+
+#page-calendar .calendar-summary-grid .metric-card{
+  min-width:0;
+}
+
+#page-calendar .calendar-agenda-bar{
+  min-height:42px;
+  padding:9px 14px;
+}
+
+#page-calendar .calendar-date-list{
+  padding:6px 12px 12px;
+}
+
+#page-calendar .calendar-date-group{
+  border-bottom:0;
+  margin:0 0 8px;
+  min-width:0;
+}
+
+#page-calendar .calendar-date-toggle{
+  width:calc(100% - 10px);
+  min-width:0;
+  margin:6px 5px 0;
+  min-height:46px;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--surface-2);
+  box-shadow:var(--shadow-soft);
+}
+
+#page-calendar .calendar-date-toggle > span{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+#page-calendar .calendar-date-toggle b{
+  overflow-wrap:anywhere;
+}
+
+#page-calendar .calendar-date-group.is-open > .calendar-date-toggle{
+  background:var(--accent-softer);
+  border-color:var(--line);
+  border-radius:var(--radius-sm);
+}
+
+#page-calendar .calendar-date-events{
+  display:grid;
+  gap:8px;
+  padding:7px 3px 9px;
+}
+
+#page-calendar .calendar-item{
+  min-width:0;
+  border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-soft);
+  padding:7px 9px;
+}
+
+#page-calendar .calendar-item .calendar-meta{
+  margin:0;
+}
+
+#page-calendar .calendar-item .calendar-title{
+  font-size:12px;
+  line-height:1.3;
+}
+
+#page-calendar .calendar-details{
+  gap:8px;
+  margin-top:7px;
+  padding-top:7px;
+}
+
+#page-calendar .calendar-details > span{
+  min-width:0;
+}
+
+@media(max-width:760px){
+  #page-calendar .calendar-agenda-status{
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+}
+
+@media(max-width:560px){
+  #page-calendar .calendar-agenda-status{
+    grid-template-columns:1fr;
+    align-items:stretch;
+    gap:6px;
+    padding:9px 10px;
+  }
+
+  #page-calendar .calendar-source{
+    justify-self:end;
+  }
+
+  #page-calendar .calendar-status .inline-status{
+    padding:7px 9px;
+  }
+
+  #page-calendar .calendar-date-list{
+    padding:6px 8px 10px;
+  }
+
+  #page-calendar .calendar-date-toggle{
+    width:calc(100% - 6px);
+    margin:5px 3px 0;
+    min-height:46px;
+    padding:8px 9px;
+  }
+
+  #page-calendar .calendar-date-events{
+    gap:8px;
+    padding:7px 3px 9px;
+  }
+
+  #page-calendar .calendar-item{
+    padding:8px 8px;
+  }
+}
+
+/* Calendar date controls use the same Neo treatment as Signals/History. */
+html[data-style="neo"] #page-calendar .calendar-date-toggle{
+  border:2px solid var(--line-strong)!important;
+  border-radius:8px!important;
+  box-shadow:3px 3px 0 var(--line-strong)!important;
+}
+
+html[data-style="neo"] #page-calendar .calendar-date-group.is-open > .calendar-date-toggle{
+  background:var(--accent-soft)!important;
+  border-color:var(--line-strong)!important;
+  box-shadow:3px 3px 0 var(--line-strong)!important;
+}
+
+
+/* ---------- Calendar mobile composition correction ------------------------ */
+/* Keep the calendar feed header compact on phones; the source link belongs to
+   the same row as the cached/online state rather than becoming a second band. */
+@media(max-width:560px){
+  #page-calendar .page-heading .secondary-button{
+    width:auto!important;
+    align-self:flex-start;
+  }
+
+  #page-calendar .calendar-agenda-status{
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:8px;
+    padding:9px 10px;
+  }
+
+  #page-calendar .calendar-source{
+    justify-self:end;
+    min-height:32px;
+    padding:5px 6px;
+  }
+
+  #page-calendar .calendar-status .inline-status{
+    width:100%;
+    min-height:34px;
+    padding:6px 8px;
+  }
+
+  #page-calendar .calendar-status .inline-status small{
+    display:block;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+}
+
+/* The first date is the primary calendar context, so it opens by default.
+   User-controlled subsequent toggles still use the existing JS state. */
+#page-calendar .calendar-date-events{
+  min-width:0;
+}
+
+
+/* ---------- Calendar parity: mobile metric and event geometry ------------ */
+@media(max-width:760px){
+  #page-calendar .calendar-summary-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:10px;
+    padding:8px 10px;
+  }
+  #page-calendar .calendar-summary-grid .metric-card{
+    min-height:42px;
+    padding:8px 10px;
+    border-radius:var(--radius-sm);
+  }
+}
+
+@media(max-width:560px){
+  #page-calendar .calendar-summary-grid{
+    gap:9px;
+    padding:8px 9px;
+  }
+  #page-calendar .calendar-agenda-bar{
+    padding:9px 12px;
+  }
+  #page-calendar .calendar-date-events{
+    gap:8px;
+    padding:7px 4px 10px;
+  }
+  #page-calendar .calendar-item{
+    min-width:0;
+    margin:0;
+  }
+  #page-calendar .calendar-details{
+    gap:7px;
+    margin-left:55px;
+    flex-wrap:wrap;
+  }
+}
+
+/* ---------- Calendar heading/action parity -------------------------------- */
+@media(max-width:560px){
+  #page-calendar .calendar-heading{
+    width:100%;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:end!important;
+    gap:10px;
+  }
+  #page-calendar .calendar-heading > div{min-width:0}
+  #page-calendar #calendarRefreshButton{
+    width:auto!important;
+    min-width:92px;
+    min-height:40px;
+    margin:0;
+    align-self:end;
+    justify-self:end;
+  }
+}
+
+
+/* ---------- Final surface parity contract ---------------------------------
+   One geometry language across Home, Signals, History, Calendar, Tools and
+   Backtest. Presentation remains theme-owned; this block only normalizes
+   surfaces, density and internal separators. */
+:root{
+  --f-outer-radius:var(--radius);
+  --f-inner-radius:var(--radius-sm);
+  --f-inner-line:1px solid var(--line);
+  --f-inner-bg:var(--surface-2);
+}
+
+/* Every top-level content section uses the same outer surface. */
+#page-overview .section-block,
+#page-signals .signals-workspace,
+#page-history .history-workspace,
+#page-calendar .calendar-workspace,
+#page-tools .tool-card{
+  border:var(--border-w) solid var(--line);
+  border-radius:var(--f-outer-radius);
+  background:var(--surface);
+  box-shadow:var(--shadow-soft);
+  min-width:0;
+}
+
+/* Nested data surfaces use one compact geometry language. */
+#page-overview .metric-card,
+#page-overview .chart-card,
+#page-signals .signal-card,
+#page-history .trade-card,
+#page-history .live-trade-row,
+#page-history .scan-history-row,
+#page-calendar .calendar-item,
+#page-tools .backtest-section,
+#page-tools .backtest-status,
+#page-tools .universe-grid,
+#page-tools .account-grid,
+#page-tools .rule-list,
+#page-tools .diagnostic-grid,
+#page-tools .schedule-inline{
+  border-radius:var(--f-inner-radius);
+}
+
+/* Tools data groups are containers, not collections of unrelated mini-cards. */
+#page-tools .universe-grid,
+#page-tools .account-grid,
+#page-tools .rule-list,
+#page-tools .diagnostic-grid,
+#page-tools .schedule-inline{
+  border:var(--f-inner-line);
+  background:var(--f-inner-bg);
+  box-shadow:none;
+  overflow:hidden;
+}
+
+/* Markets and Accounts now share the same internal surface treatment. */
+#page-tools .asset-category{
+  min-width:0;
+  padding:9px 10px;
+  border-bottom:1px solid var(--line);
+}
+#page-tools .asset-category:last-child{
+  border-bottom:0;
+}
+#page-tools .asset-category-items{
+  min-width:0;
+}
+#page-tools .account-grid{
+  gap:0!important;
+}
+#page-tools .account-grid article{
+  min-height:0;
+  padding:9px 10px!important;
+  border:0!important;
+  border-bottom:1px solid var(--line)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+#page-tools .account-grid article:nth-child(odd){
+  border-right:0!important;
+}
+#page-tools .account-grid article:nth-child(even){
+  border-left:1px solid var(--line)!important;
+}
+
+/* Locked Rules uses the same row density as Accounts and Markets. */
+#page-tools .rule-list>div{
+  padding:9px 10px!important;
+  border:0!important;
+  border-bottom:1px solid var(--line)!important;
+  background:transparent!important;
+}
+#page-tools .rule-list>div:last-child{
+  border-bottom:0!important;
+}
+
+/* Diagnostics and candle schedule share the same 2-column / 3x2 rhythm. */
+#page-tools .diagnostic-grid{
+  gap:0!important;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+#page-tools .diagnostic-grid article{
+  padding:9px 10px!important;
+  border:0!important;
+  border-bottom:1px solid var(--line)!important;
+  background:transparent!important;
+}
+#page-tools .diagnostic-grid article:nth-child(even){
+  border-left:1px solid var(--line)!important;
+}
+#page-tools .diagnostic-grid article:nth-child(n+3){
+  border-top:0!important;
+}
+#page-tools .schedule-inline{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:0!important;
+  margin-top:8px!important;
+}
+#page-tools .schedule-inline span{
+  min-height:0!important;
+  padding:7px 5px!important;
+  border:0!important;
+  border-right:1px solid var(--line)!important;
+  border-bottom:1px solid var(--line)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+#page-tools .schedule-inline span:nth-child(3n){
+  border-right:0!important;
+}
+#page-tools .schedule-inline span:nth-child(n+4){
+  border-top:0!important;
+}
+#page-tools .schedule-inline span:nth-child(n+4):nth-last-child(-n+3){
+  border-bottom:0!important;
+}
+
+/* Backtest result sections follow the same inner-card density. */
+#page-tools .backtest-results{
+  margin-top:7px!important;
+  gap:7px!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+#page-tools .backtest-section{
+  padding:9px!important;
+}
+#page-tools .backtest-summary,
+#page-tools .backtest-metrics{
+  gap:7px!important;
+}
+#page-tools .backtest-summary>div,
+#page-tools .backtest-metrics>div{
+  padding:8px 9px!important;
+  border:var(--f-inner-line)!important;
+  border-radius:var(--radius-xs)!important;
+  background:var(--surface-2)!important;
+}
+#page-tools .backtest-trades{
+  border:var(--f-inner-line)!important;
+  border-radius:var(--radius-xs)!important;
+  background:var(--surface)!important;
+  /* No overflow declaration here: styles.css section 17 owns the scroll
+     contract for this list. A non-important `overflow:hidden` silently lost to
+     that contract while still reading like it governed the panel. */
+}
+#page-tools .backtest-trade-row{
+  padding:7px 9px!important;
+  gap:7px!important;
+  border-bottom:1px solid var(--line);
+}
+#page-tools .backtest-trade-row:last-child{
+  border-bottom:0;
+}
+
+@media(max-width:560px){
+  #page-tools .asset-category{padding:8px 9px}
+  #page-tools .account-grid article{padding:8px 9px!important}
+  #page-tools .rule-list>div{padding:8px 9px!important}
+  #page-tools .diagnostic-grid article{padding:8px 9px!important}
+  #page-tools .schedule-inline{margin-top:7px!important}
+  #page-tools .schedule-inline span{padding:6px 4px!important}
+  #page-tools .backtest-section{padding:8px!important}
+  #page-tools .backtest-summary,
+  #page-tools .backtest-metrics{gap:6px!important}
+  #page-tools .backtest-summary>div,
+  #page-tools .backtest-metrics>div{padding:7px 8px!important}
+  #page-tools .backtest-trade-row{padding:7px 8px!important}
+}
+
+
+/* ---------- Home mobile composition repair -------------------------------- */
+@media(max-width:560px){
+  #page-overview .overview-scan .section-heading{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    align-items:start!important;
+    gap:8px!important;
+  }
+  #page-overview .overview-scan .section-heading>div{min-width:0!important}
+  #page-overview .overview-scan .section-heading h2{white-space:nowrap!important}
+  #page-overview .overview-scan #scanSummary{
+    width:100%!important;
+    max-width:100%!important;
+    text-align:left!important;
+  }
+}
+
+
+/* ---------- Signals mobile repair: preserve compact ledger geometry -------- */
+@media(max-width:560px){
+  #page-signals .signal-date-rows .signal-card{
+    min-height:0!important;
+    padding:0!important;
+    overflow:hidden!important;
+  }
+  #page-signals .signal-date-rows .signal-card .card-main{
+    min-height:64px!important;
+    height:64px!important;
+    box-sizing:border-box!important;
+    padding:9px 10px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading{
+    gap:10px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading strong{
+    font-size:15px!important;
+    line-height:1.2!important;
+  }
+  #page-signals .signal-date-rows .signal-leading small{
+    font-size:12px!important;
+    line-height:1.25!important;
+  }
+  #page-signals .signal-date-rows .direction-icon{
+    width:28px!important;
+    height:28px!important;
+    border-radius:8px!important;
+  }
+  #page-signals .signal-date-rows .card-state{
+    gap:8px!important;
+  }
+}
+@media(hover:none){
+  #page-signals .signal-date-rows .card-main:hover{
+    background:transparent!important;
+  }
+}
+
+
+/* ---------- Signals expanded card: compact two-column information rows ----- */
+@media(max-width:560px){
+  #page-signals .signal-date-rows .signal-card .card-main{
+    min-height:56px!important;
+    height:56px!important;
+    padding:7px 9px!important;
+  }
+  #page-signals .signal-date-rows .direction-icon{
+    width:26px!important;
+    height:26px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading strong{
+    font-size:14px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading small{
+    font-size:11px!important;
+  }
+  #page-signals .signal-card.expanded .expand-content{
+    padding:4px 6px 6px!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid>div{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center!important;
+    column-gap:8px!important;
+    min-height:31px!important;
+    padding:4px 7px!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid span{
+    margin:0!important;
+    white-space:nowrap!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid b{
+    margin:0!important;
+    text-align:right!important;
+    max-width:100%!important;
+  }
+  #page-signals .signal-card.expanded .reason{
+    margin-top:4px!important;
+    padding:5px 7px!important;
+  }
+}
+
+
+/* ---------- Signals / History hierarchy contract --------------------------
+   Both ledgers use the same date hierarchy and row typography. The content
+   structure stays different; only the visual language is shared. */
+@media(max-width:560px){
+  #page-signals .signal-date-toggle,
+  #page-history .history-date-toggle{
+    min-height:46px!important;
+    padding:8px 9px!important;
+  }
+  #page-signals .signal-date-toggle b,
+  #page-history .history-date-toggle b{
+    font-size:15px!important;
+    line-height:1.2!important;
+    font-weight:800!important;
+  }
+  #page-signals .signal-date-toggle small,
+  #page-history .history-date-toggle small{
+    margin-top:1px!important;
+    font-size:12px!important;
+    line-height:1.25!important;
+    font-weight:700!important;
+  }
+  #page-signals .signal-date-toggle i,
+  #page-history .history-date-toggle i{
+    width:40px!important;
+    height:40px!important;
+    min-width:40px!important;
+    min-height:40px!important;
+    border-radius:8px!important;
+  }
+
+  /* Signal rows follow the same visual hierarchy as History trade rows. */
+  #page-signals .signal-date-rows .signal-card,
+  #page-history .history-date-rows .trade-row{
+    border-radius:var(--radius-sm)!important;
+    box-shadow:var(--shadow-soft)!important;
+  }
+  #page-signals .signal-date-rows .signal-card .card-main{
+    min-height:68px!important;
+    height:68px!important;
+    padding:9px 10px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading{
+    gap:11px!important;
+  }
+  #page-signals .signal-date-rows .direction-icon{
+    width:28px!important;
+    height:28px!important;
+    border-radius:8px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading strong{
+    font-size:15px!important;
+    line-height:1.2!important;
+    font-weight:800!important;
+  }
+  #page-signals .signal-date-rows .signal-leading small{
+    margin-top:2px!important;
+    font-size:12px!important;
+    line-height:1.3!important;
+  }
+  #page-signals .signal-date-rows .signal-side{
+    font-size:10px!important;
+    min-height:22px!important;
+    padding:2px 8px!important;
+  }
+
+  /* Expanded data keeps the same label/value hierarchy: label muted,
+     value prominent, both aligned to a consistent right edge. */
+  #page-signals .signal-card.expanded .detail-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:1px!important;
+    padding:1px!important;
+    background:var(--line)!important;
+    border:1px solid var(--line)!important;
+    border-radius:var(--radius-xs)!important;
+    overflow:hidden!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid>div{
+    min-height:38px!important;
+    padding:6px 8px!important;
+    border-radius:0!important;
+    background:var(--surface-2)!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid span{
+    font-size:9.5px!important;
+    line-height:1.2!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid b{
+    margin-top:3px!important;
+    font-size:12px!important;
+    line-height:1.2!important;
+    text-align:right!important;
+  }
+}
+
+
+/* ---------- Signals: final compact hierarchy / no-overlap contract --------
+   Keep the ledger visually subordinate to the date group. Expanded values are
+   left-aligned within a consistent label/value row so long timestamps never
+   collide with labels. */
+@media(max-width:560px){
+  #page-signals .signal-date-toggle,
+  #page-history .history-date-toggle{
+    min-height:44px!important;
+    padding:7px 9px!important;
+  }
+  #page-signals .signal-date-toggle b,
+  #page-history .history-date-toggle b{
+    font-size:13px!important;
+    line-height:1.2!important;
+    font-weight:800!important;
+  }
+  #page-signals .signal-date-toggle small,
+  #page-history .history-date-toggle small{
+    font-size:10.5px!important;
+    line-height:1.2!important;
+  }
+  #page-signals .signal-date-toggle i,
+  #page-history .history-date-toggle i{
+    width:34px!important;
+    height:34px!important;
+    min-width:34px!important;
+    min-height:34px!important;
+  }
+
+  #page-signals .signal-date-rows .signal-card .card-main{
+    min-height:56px!important;
+    height:56px!important;
+    padding:7px 9px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading{gap:9px!important}
+  #page-signals .signal-date-rows .direction-icon{
+    width:25px!important;
+    height:25px!important;
+    border-radius:7px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading strong{
+    font-size:13.5px!important;
+    line-height:1.2!important;
+    font-weight:800!important;
+  }
+  #page-signals .signal-date-rows .signal-leading small{
+    font-size:10.5px!important;
+    line-height:1.2!important;
+  }
+  #page-signals .signal-date-rows .signal-side{
+    min-height:20px!important;
+    padding:2px 7px!important;
+    font-size:9.5px!important;
+  }
+
+  /* Two columns of complete label/value pairs. Both label and value start
+     from the same side; values are never forced to the far right. */
+  #page-signals .signal-card.expanded .detail-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:0!important;
+    padding:0!important;
+    background:var(--line)!important;
+    border:1px solid var(--line)!important;
+    border-radius:var(--radius-xs)!important;
+    overflow:hidden!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid>div{
+    display:flex!important;
+    align-items:baseline!important;
+    gap:7px!important;
+    min-width:0!important;
+    min-height:34px!important;
+    padding:6px 7px!important;
+    border:0!important;
+    border-radius:0!important;
+    background:var(--surface-2)!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid span{
+    flex:0 0 auto!important;
+    margin:0!important;
+    font-size:8.5px!important;
+    line-height:1.15!important;
+    white-space:nowrap!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid b{
+    min-width:0!important;
+    margin:0!important;
+    font-size:11px!important;
+    line-height:1.2!important;
+    text-align:left!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+  }
+  #page-signals .signal-card.expanded .reason{
+    margin-top:4px!important;
+    padding:5px 7px!important;
+  }
+  #page-signals .signal-card.expanded .reason>span{
+    font-size:8.5px!important;
+  }
+}
+
+
+/* ---------- History parity freeze ----------------------------------------
+   History and Signals share the same mobile hierarchy: date group > row >
+   metadata. Keep content rails and controls stable without changing data. */
+@media(max-width:560px){
+  #page-history .history-date-rows .trade-row{
+    min-width:0;
+    border-radius:var(--radius-sm)!important;
+    box-shadow:var(--shadow-soft)!important;
+  }
+  #page-history .history-date-rows .trade-row-main{
+    min-height:56px!important;
+    padding:7px 9px!important;
+    gap:9px!important;
+  }
+  #page-history .history-date-rows .trade-row-identity{
+    gap:9px!important;
+    min-width:0;
+  }
+  #page-history .history-date-rows .trade-row-identity strong{
+    font-size:13.5px!important;
+    line-height:1.2!important;
+    font-weight:800!important;
+  }
+  #page-history .history-date-rows .trade-row-identity small{
+    margin-top:2px!important;
+    font-size:10.5px!important;
+    line-height:1.2!important;
+  }
+  #page-history .history-date-rows .trade-detail-button{
+    min-width:58px!important;
+    min-height:34px!important;
+    padding:5px 10px!important;
+    font-size:10.5px!important;
+    border-radius:8px!important;
+  }
+
+  /* Scan history is a list of runtime rows, not a second visual system. */
+  #page-history .history-scan-row{
+    min-width:0!important;
+    border-radius:var(--radius-sm)!important;
+    box-shadow:var(--shadow-soft)!important;
+  }
+  #page-history .history-scan-identity strong{
+    font-size:13.5px!important;
+    line-height:1.2!important;
+    font-weight:800!important;
+  }
+  #page-history .history-scan-identity small{
+    font-size:10.5px!important;
+    line-height:1.2!important;
+  }
+  #page-history .history-scan-status{
+    font-size:9.5px!important;
+  }
+  #page-history .history-scan-metrics span{
+    font-size:8.5px!important;
+  }
+  #page-history .history-scan-metrics b{
+    font-size:10.5px!important;
+  }
+}
+
+
+/* ---------- Signals / History visual freeze ------------------------------
+   Keep the compact signal geometry. Match History's row language and use a
+   stable content rail so labels/values never appear to start at arbitrary x. */
+@media(max-width:560px){
+  #page-signals .signal-date-rows .signal-card{
+    background:var(--surface)!important;
+    border:1px solid var(--line)!important;
+    box-shadow:var(--shadow-soft)!important;
+  }
+  #page-signals .signal-date-rows .signal-card .card-main{
+    padding:7px 9px!important;
+  }
+  #page-signals .signal-date-rows .signal-leading{
+    padding-left:0!important;
+    min-width:0!important;
+  }
+  #page-signals .signal-date-rows .signal-leading>div:last-child{
+    min-width:0!important;
+    padding-left:2px!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid>div{
+    align-items:baseline!important;
+    padding:6px 9px!important;
+    gap:8px!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid span{
+    width:76px!important;
+    min-width:76px!important;
+    text-align:left!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid b{
+    flex:1 1 auto!important;
+    min-width:0!important;
+    text-align:left!important;
+  }
+  #page-signals .signal-card.expanded .reason{
+    display:flex!important;
+    align-items:baseline!important;
+    gap:8px!important;
+    padding:6px 9px!important;
+  }
+  #page-signals .signal-card.expanded .reason>span{
+    width:76px!important;
+    min-width:76px!important;
+    text-align:left!important;
+  }
+  #page-signals .signal-card.expanded .reason>b{
+    flex:1 1 auto!important;
+    text-align:left!important;
+  }
+}
+
+
+/* ---------- Signals frozen surface polish ----------------------------------
+   Structure is frozen. Match History's trade-row surface language while
+   keeping Signals' existing data grid. No sizing/markup changes here. */
+@media(max-width:560px){
+  #page-signals .signal-date-rows .signal-card{
+    border:1px solid var(--line)!important;
+    border-left-width:4px!important;
+    border-radius:var(--radius-sm)!important;
+    background:var(--surface)!important;
+    box-shadow:var(--shadow-soft)!important;
+    overflow:hidden!important;
+  }
+  #page-signals .signal-date-rows .signal-card.buy{border-left-color:var(--positive)!important}
+  #page-signals .signal-date-rows .signal-card.sell{border-left-color:var(--negative)!important}
+  #page-signals .signal-date-rows .signal-card.incomplete{border-left-color:var(--warning)!important}
+
+  /* Same white row surface as History; no competing grey mini-cards. */
+  #page-signals .signal-card.expanded .expand-content{
+    padding:0 10px 8px!important;
+    border-top:1px solid var(--line)!important;
+    background:var(--surface)!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:0!important;
+    padding:0!important;
+    margin:0!important;
+    border:1px solid var(--line)!important;
+    border-radius:var(--radius-xs)!important;
+    background:var(--surface)!important;
+    overflow:hidden!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid>div{
+    display:grid!important;
+    grid-template-columns:max-content minmax(0,1fr)!important;
+    align-items:baseline!important;
+    gap:8px!important;
+    min-width:0!important;
+    min-height:32px!important;
+    padding:6px 8px!important;
+    border:0!important;
+    border-radius:0!important;
+    background:var(--surface)!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid span{
+    min-width:0!important;
+    margin:0!important;
+    font-size:8.5px!important;
+    line-height:1.2!important;
+    white-space:nowrap!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid b{
+    min-width:0!important;
+    margin:0!important;
+    font-size:10.5px!important;
+    line-height:1.25!important;
+    text-align:left!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+  }
+  #page-signals .signal-card.expanded .reason{
+    display:grid!important;
+    grid-template-columns:max-content minmax(0,1fr)!important;
+    align-items:baseline!important;
+    gap:8px!important;
+    margin-top:5px!important;
+    padding:6px 8px!important;
+    border:1px solid var(--line)!important;
+    border-radius:var(--radius-xs)!important;
+    background:var(--surface)!important;
+  }
+  #page-signals .signal-card.expanded .reason>span{
+    margin:0!important;
+    font-size:8.5px!important;
+    white-space:nowrap!important;
+  }
+  #page-signals .signal-card.expanded .reason p{
+    min-width:0!important;
+    margin:0!important;
+    font-size:10.5px!important;
+    line-height:1.25!important;
+    text-align:left!important;
+  }
+}
+
+
+/* Signals: keep the strategy-reason row as a real label/value pair. */
+@media(max-width:560px){
+  #page-signals .signal-card.expanded .reason{
+    display:flex!important;
+    align-items:baseline!important;
+    gap:8px!important;
+    min-width:0!important;
+    margin-top:4px!important;
+    padding:6px 9px!important;
+  }
+  #page-signals .signal-card.expanded .reason>span{
+    flex:0 0 76px!important;
+    width:76px!important;
+    min-width:76px!important;
+    margin:0!important;
+    white-space:nowrap!important;
+  }
+  #page-signals .signal-card.expanded .reason>p{
+    flex:1 1 auto!important;
+    min-width:0!important;
+    margin:0!important;
+    font-size:11px!important;
+    line-height:1.25!important;
+    color:var(--text)!important;
+    overflow-wrap:anywhere!important;
+  }
+}
+
+
+/* Signals final detail alignment: label/value rows, never stacked or right-justified. */
+@media(max-width:560px){
+  #page-signals .signal-card.expanded .detail-grid>div{
+    display:grid!important;
+    grid-template-columns:max-content minmax(0,1fr)!important;
+    align-items:center!important;
+    column-gap:8px!important;
+    padding:5px 7px!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid span{
+    width:auto!important;
+    min-width:0!important;
+    margin:0!important;
+    text-align:left!important;
+    white-space:nowrap!important;
+    line-height:1.1!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid b,
+  #page-signals .signal-card.expanded .detail-grid b.fresh,
+  #page-signals .signal-card.expanded .detail-grid b.stale{
+    min-width:0!important;
+    width:auto!important;
+    max-width:100%!important;
+    justify-self:start!important;
+    margin:0!important;
+    padding:0!important;
+    text-align:left!important;
+    white-space:normal!important;
+    overflow:visible!important;
+    text-overflow:clip!important;
+    overflow-wrap:anywhere!important;
+    line-height:1.2!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid b.fresh,
+  #page-signals .signal-card.expanded .detail-grid b.stale{
+    padding:1px 5px!important;
+    justify-self:start!important;
+    width:max-content!important;
+    max-width:100%!important;
+  }
+  #page-signals .signal-card.expanded .reason{
+    display:grid!important;
+    grid-template-columns:max-content minmax(0,1fr)!important;
+    align-items:center!important;
+    column-gap:8px!important;
+    margin:5px 0 0!important;
+    padding:6px 8px!important;
+  }
+  #page-signals .signal-card.expanded .reason>span{
+    width:auto!important;
+    min-width:0!important;
+    margin:0!important;
+    white-space:nowrap!important;
+    text-align:left!important;
+  }
+  #page-signals .signal-card.expanded .reason>p{
+    min-width:0!important;
+    margin:0!important;
+    text-align:left!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+    line-height:1.2!important;
+  }
+}
+
+
+/* Signals: lock label/value start columns so every row shares the same X origin. */
+@media(max-width:560px){
+  #page-signals .signal-card.expanded .detail-grid>div{
+    grid-template-columns:90px minmax(0,1fr)!important;
+    column-gap:8px!important;
+  }
+  #page-signals .signal-card.expanded .detail-grid span{
+    width:90px!important;
+    min-width:90px!important;
+    max-width:90px!important;
+    overflow:hidden!important;
+    text-overflow:clip!important;
+    white-space:nowrap!important;
+  }
+  #page-signals .signal-card.expanded .reason{
+    grid-template-columns:105px minmax(0,1fr)!important;
+    column-gap:8px!important;
+  }
+  #page-signals .signal-card.expanded .reason>span{
+    width:105px!important;
+    min-width:105px!important;
+    max-width:105px!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+  }
+}
+
+
+/* Signals: keep compact single-value fields on one line; long dates/age may still wrap. */
+@media(max-width:560px){
+  #page-signals .signal-card.expanded .detail-grid>div:nth-child(2) b,
+  #page-signals .signal-card.expanded .detail-grid>div:nth-child(4) b,
+  #page-signals .signal-card.expanded .detail-grid>div:nth-child(8) b,
+  #page-signals .signal-card.expanded .detail-grid>div:nth-child(10) b{
+    white-space:nowrap!important;
+    overflow-wrap:normal!important;
+    word-break:normal!important;
+  }
+}
+
+/* ---------- History: final Ponytail mobile contract -----------------------
+   Keep the existing History structure. Only restore the compact row geometry
+   that matches the already-approved Signals treatment. */
+@media(max-width:560px){
+  /* Completed trades: identity + status + View stay on one row. */
+  #page-history .history-date-rows .trade-row-main{
+    grid-template-columns:minmax(0,1fr) auto auto!important;
+    align-items:center!important;
+    min-width:0!important;
+    min-height:56px!important;
+    padding:7px 9px!important;
+    gap:8px!important;
+  }
+  #page-history .history-date-rows .trade-row-identity{
+    min-width:0!important;
+    gap:9px!important;
+  }
+  #page-history .history-date-rows .trade-row-identity strong,
+  #page-history .history-date-rows .trade-row-identity small{
+    min-width:0!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+  #page-history .history-date-rows .trade-row-identity strong{
+    font-size:13.5px!important;
+    line-height:1.2!important;
+  }
+  #page-history .history-date-rows .trade-row-identity small{
+    font-size:10.5px!important;
+    line-height:1.2!important;
+  }
+  #page-history .history-date-rows .trade-detail-button{
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:auto!important;
+    min-width:58px!important;
+    min-height:34px!important;
+    height:34px!important;
+    padding:5px 10px!important;
+    font-size:10.5px!important;
+    border-radius:8px!important;
+  }
+
+  /* Scan history: one compact card with readable two-line composition. */
+  #page-history .history-scan-row{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:5px 8px!important;
+    min-width:0!important;
+    padding:8px 9px!important;
+  }
+  #page-history .history-scan-head{display:contents!important}
+  #page-history .history-scan-identity{
+    min-width:0!important;
+    grid-column:1!important;
+  }
+  #page-history .history-scan-identity strong{
+    display:block!important;
+    min-width:0!important;
+    font-size:11.5px!important;
+    line-height:1.2!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  #page-history .history-scan-identity small{
+    display:block!important;
+    margin-top:2px!important;
+    font-size:9.5px!important;
+    line-height:1.2!important;
+    white-space:nowrap!important;
+  }
+  #page-history .history-scan-status{
+    grid-column:2!important;
+    grid-row:1!important;
+    align-self:center!important;
+    min-width:0!important;
+    padding:3px 7px!important;
+    font-size:8px!important;
+  }
+  #page-history .history-scan-metrics{
+    grid-column:1/-1!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:6px!important;
+    min-width:0!important;
+    overflow:hidden!important;
+  }
+  #page-history .history-scan-metrics span{
+    flex:0 1 auto!important;
+    min-width:0!important;
+    padding:3px 0!important;
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    font-size:8.5px!important;
+    line-height:1.15!important;
+    white-space:nowrap!important;
+  }
+  #page-history .history-scan-metrics b{
+    font-size:10px!important;
+    line-height:1!important;
+  }
+
+
+/* ---------- History summary: shared metric geometry ---------------------- */
+/* Ponytail root-cause fix: keep the 3-column grid, but let each metric own
+   a stable vertical label/value stack. Financial values remain fully visible
+   instead of being ellipsized when they become long (e.g. ₹1,00,000+). */
+@media(max-width:560px){
+  #page-history .history-summary-grid{
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+
+  #page-history .history-summary-grid .metric-card{
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:flex-start!important;
+    justify-content:center!important;
+    min-width:0!important;
+    width:100%!important;
+    box-sizing:border-box!important;
+    gap:4px!important;
+    padding:9px 8px!important;
+  }
+
+  #page-history .history-summary-grid .metric-card span{
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin:0!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    font-size:9px!important;
+    line-height:1.15!important;
+  }
+
+  #page-history .history-summary-grid .metric-card strong{
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin:0!important;
+    text-align:left!important;
+    white-space:normal!important;
+    overflow:visible!important;
+    text-overflow:clip!important;
+    overflow-wrap:anywhere!important;
+    word-break:normal!important;
+    font-size:13px!important;
+    line-height:1.15!important;
+    font-variant-numeric:tabular-nums!important;
+  }
+
+  #page-history .history-summary-grid .metric-card small{
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin:0!important;
+    font-size:8.5px!important;
+    line-height:1.15!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+}
+
+/* Slightly larger mobile widths get more breathing room without changing the
+   component structure or introducing device-specific hacks. */
+@media(min-width:400px) and (max-width:560px){
+  #page-history .history-summary-grid{
+    gap:10px!important;
+  }
+
+  #page-history .history-summary-grid .metric-card{
+    padding-inline:10px!important;
+  }
+
+  #page-history .history-summary-grid .metric-card strong{
+    font-size:14px!important;
+  }
+}
+
+/* ---------- End History metric repair ------------------------------------ */
+} /* end @media(max-width:560px) - History mobile contract */
+
+/* ---------- Pass 2: canonical ExpandableControl -------------------------- */
+.collapse-control{position:relative;display:grid;place-items:center;box-sizing:border-box;width:var(--ui-collapse-size)!important;height:var(--ui-collapse-size)!important;min-width:var(--ui-collapse-size)!important;min-height:var(--ui-collapse-size)!important;flex:0 0 var(--ui-collapse-size)!important;border:var(--ui-collapse-border)!important;border-radius:var(--ui-collapse-radius)!important;background:var(--surface-2);color:var(--text-soft);transform:none!important;transition:background .15s ease,color .15s ease,border-color .15s ease}
+.collapse-control::after{content:"";width:var(--ui-collapse-icon-size);height:var(--ui-collapse-icon-size);box-sizing:border-box;border-right:var(--ui-collapse-icon-weight) solid currentColor;border-bottom:var(--ui-collapse-icon-weight) solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .2s ease}
+.collapse-control.is-open::after,.collapse-control[aria-expanded="true"]::after,.is-open > .collapse-control::after,.is-open .collapse-control::after,[aria-expanded="true"] > .collapse-control::after{transform:translateY(2px) rotate(-135deg)}
+.collapse-control:hover,.collapse-control:focus-visible{color:var(--accent-strong);border-color:var(--accent)!important;background:var(--accent-soft)}
+.collapse-control:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.collapse-control,.collapse-control::after{transition:none!important}}
+html[data-style="neo"] .collapse-control,html.neo-mode .collapse-control{border:2px solid var(--line-strong)!important;border-radius:var(--ui-collapse-radius)!important;box-shadow:2px 2px 0 var(--line-strong)}
+html[data-style="neo"] .collapse-control:hover,html[data-style="neo"] .collapse-control:focus-visible,html.neo-mode .collapse-control:hover,html.neo-mode .collapse-control:focus-visible{transform:none!important;box-shadow:3px 3px 0 var(--line-strong)}
+html[data-style="neo"] .collapse-control:active,html.neo-mode .collapse-control:active{transform:none!important;box-shadow:0 0 0 var(--line-strong)}
+
+/* Shared date-group contract: Signals, History and Calendar use the same row/control geometry. */
+#page-signals .signal-date-toggle,#page-history .history-date-toggle,#page-calendar .calendar-date-toggle{min-height:52px;height:52px;width:100%;}
+#page-signals .signal-date-toggle .collapse-control,#page-history .history-date-toggle .collapse-control,#page-calendar .calendar-date-toggle .collapse-control{width:var(--ui-collapse-size);min-width:var(--ui-collapse-size);max-width:var(--ui-collapse-size);height:var(--ui-collapse-size);min-height:var(--ui-collapse-size);max-height:var(--ui-collapse-size);}

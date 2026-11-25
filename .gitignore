@@ -1,0 +1,44 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+
+# Operator configuration saved from the dashboard Tools screen (accounts,
+# assets, routing). Machine-local on purpose: the compiled-in defaults in
+# config.py are the shipped contract, so a checkout starts from the same
+# accounts, universe and routing everyone else has.
+bot_settings.json
+bot_settings.json.tmp
+
+# Notification channels saved from the Tools screen (webhook targets are
+# credentials) and the daily/weekly summary watermark. Machine-local for the
+# same reason as bot_settings.json.
+notification_channels.json
+notification_channels.json.tmp
+notification_summary_state.json
+notification_summary_state.json.tmp
+# Playwright CLI output (may contain credentials)
+.playwright/
+.playwright-cli/
+
+# Vendored third-party agent tooling (~26MB, not part of the bot).
+# The skill directories under here are deliberately untracked. The tracked
+# record of the ponytail-driven UI audit lives at the repository root, as
+# SENIOR_PONYTAIL_AUDIT.md and tests/test_ponytail_fixes.py.
+agent/
+.agents/
+.claude/
+skills-lock.json
+
+# NOTE: multibot2-ai-rebuild-kit.zip is deliberately NOT ignored.
+# It is a requested deliverable, not a local build artefact. Its contents are
+# all tracked repo files; rebuild it with the commands in docs/KIT_README.md.

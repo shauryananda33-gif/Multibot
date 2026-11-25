@@ -1,0 +1,32 @@
+MULTIBOT2 v3.5.0
+================
+
+Architecture
+- Automatic strategy discovery under strategies/.
+- Stable Strategy / StrategyManifest / Signal contracts.
+- Shared signal -> freshness -> duplicate -> risk -> trade -> persistence -> Telegram lifecycle.
+- Strategy-owned timeframes and data requests.
+- Generic registry-driven backtesting.
+
+Built-in strategies
+- Trend Pulse 1.0.0 (adaptive_trend): 2 assets, 1D.
+- Engulf 66 SMA 1.0.2 (engulfing_66_sma): 25 assets, 1h.
+- Sweep 4H 2.1.0 (sweep_v2): 25 assets, 1h/4h canonical sweep schedules.
+
+Locked rules
+- Paper only, Yahoo only, 25 assets, ₹100,000, ₹2,000 risk, 1x leverage.
+- Freshness exactly 1 hour.
+- Maximum two sends per signal identity.
+- Turso/libSQL is the deployed runtime primary; SQLite is for local development/tests.
+
+Research
+- 11 common backtest metrics.
+- Transparent 0-100 rating with category breakdown.
+- Strategy version + parameter snapshots.
+
+Documentation
+- README.md
+- AI_REBUILD_SPEC.md
+- STRATEGY_DEVELOPER_GUIDE.md
+- FINALIZATION_RULEBOOK.md
+- MULTIBOT2_CANONICAL_NOTES.md
