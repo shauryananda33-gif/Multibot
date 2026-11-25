@@ -86,7 +86,7 @@ class YahooProvider:
         if value == "ytd":
             return current.normalize().replace(month=1, day=1)
         import re
-        match = re.fullmatch(r"(\\d+)(d|mo|y)", value)
+        match = re.fullmatch(r"(\d+)(d|mo|y)", value)
         if not match:
             return None
         amount, unit = int(match.group(1)), match.group(2)
