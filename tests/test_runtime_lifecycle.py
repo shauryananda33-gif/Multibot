@@ -307,3 +307,20 @@ def test_remote_connection_wraps_statement_error_without_masking_it():
     with pytest.raises(db_module.DatabaseError, match="stream was idle for too long"):
         with remote as connection:
             connection.execute("UPDATE runtime_leases SET owner_id=?",("process-a",))
+
+
+def test_operational_worker_loops_exit_cleanly_after_leadership_loss(monkeypatch):
+    stop = threading.Event()
+    monkeypatch.setattr(main, "STOP", stop)
+
+    def lost(*args, **kwargs):
+        raise RuntimeLeadershipError("lease lost")
+
+    monkeypatch.setattr(main, "run_all_cycles", lost)
+    main.scanner_loop()
+
+    monkeypatch.setattr(main, "monitor_once", lost)
+    main.monitor_loop()
+
+    monkeypatch.setattr(main, "_require_runtime_leader", lost)
+    main.summary_loop()
