@@ -98,8 +98,10 @@ class _PostgresCursor:
 class _PostgresConnection:
     """Connection context with sqlite-like execute() and deterministic close."""
 
-    def __init__(self, connection):
+    def __init__(self, connection, *, pool=None):
         self._connection = connection
+        self._pool = pool
+        self._released = False
 
     def execute(self, sql, parameters=()):
         try:
@@ -126,7 +128,13 @@ class _PostgresConnection:
         self._connection.rollback()
 
     def close(self):
-        self._connection.close()
+        if self._released:
+            return
+        self._released = True
+        if self._pool is None:
+            self._connection.close()
+        else:
+            self._pool.putconn(self._connection)
 
     def __enter__(self):
         return self
@@ -134,7 +142,13 @@ class _PostgresConnection:
     def __exit__(self, exc_type, exc_value, traceback):
         try:
             self.commit() if exc_type is None else self.rollback()
-        finally:
+        except Exception:
+            try:
+                self._connection.close()
+            finally:
+                self.close()
+            raise
+        else:
             self.close()
         return False
 
@@ -159,9 +173,31 @@ class DatabaseManager(_SQLiteDatabaseManager):
         self._health_check_lock = threading.Lock()
         self._health_check_at = 0.0
         self._health_check_result = None
+        self._pool = None
 
         if self.supabase_enabled:
-            self._initialize()
+            try:
+                from psycopg_pool import ConnectionPool
+                self._pool = ConnectionPool(
+                    conninfo=SUPABASE_DB_URL,
+                    min_size=1,
+                    max_size=4,
+                    timeout=10,
+                    kwargs={
+                        "connect_timeout": 10,
+                        "sslmode": "require",
+                        "application_name": "multibot2",
+                        "options": "-c search_path=multibot,public",
+                        "prepare_threshold": None,
+                    },
+                    open=True,
+                )
+                self._initialize()
+            except Exception:
+                if self._pool is not None:
+                    self._pool.close()
+                    self._pool = None
+                raise
         elif os.getenv("PORT"):
             # Never silently fall back to Render's ephemeral filesystem.
             self._missing_supabase_configuration = True
@@ -177,18 +213,14 @@ class DatabaseManager(_SQLiteDatabaseManager):
             connection.row_factory = sqlite3.Row
             return connection
         try:
-            import psycopg
-            connection = psycopg.connect(
-                SUPABASE_DB_URL,
-                connect_timeout=10,
-                sslmode="require",
-                application_name="multibot2",
-                options="-c search_path=multibot,public",
-                prepare_threshold=None,
-            )
-            return _PostgresConnection(connection)
+            if self._pool is None:
+                raise DatabaseError("Supabase Postgres connection pool is not initialized")
+            connection = self._pool.getconn(timeout=10)
+            return _PostgresConnection(connection, pool=self._pool)
         except Exception as exc:
-            raise DatabaseError(f"Supabase Postgres connection failed: {exc}") from exc
+            if isinstance(exc, DatabaseError):
+                raise
+            raise DatabaseError(f"Supabase Postgres pooled connection failed: {exc}") from exc
 
     def _initialize(self):
         """Fail fast when the versioned Supabase migration has not been applied."""
@@ -232,6 +264,12 @@ class DatabaseManager(_SQLiteDatabaseManager):
                         f"Supabase Postgres {operation_name} failed after {attempts} attempts: {exc}"
                     ) from exc
                 time.sleep(0.2 * (2 ** attempt))
+
+    def close(self):
+        """Close the process-local pool after all database-using workers stop."""
+        pool, self._pool = self._pool, None
+        if pool is not None:
+            pool.close(timeout=10)
 
     def market_data_cache_health(self):
         if not self.supabase_enabled:

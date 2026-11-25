@@ -93,7 +93,7 @@ def ensure_runtime():
     if not ACCOUNTS: init_state()
     if REGISTRY is None: REGISTRY=discover_strategies()
     if SERVICE is None: SERVICE=StrategyService(registry=REGISTRY,provider=YahooProvider(database=DB),database=DB,accounts=ACCOUNTS,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader)
-    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol),accounts=ACCOUNTS)
+    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol,priority=0),accounts=ACCOUNTS)
     if REMINDERS is None and settings.telegram_bot_token and settings.telegram_chat_id: REMINDERS=ReminderService(DB)
     with LOCK:
         for st in REGISTRY.all():
@@ -1205,6 +1205,11 @@ def main():
                 logger.info("Runtime lease released | pid=%s owner=%s",os.getpid(),RUNTIME_OWNER_ID)
             except Exception:
                 logger.exception("Runtime lease release failed | pid=%s",os.getpid())
+            try:
+                DB.close()
+                logger.info("Database connection pool closed | pid=%s",os.getpid())
+            except Exception:
+                logger.exception("Database connection pool close failed | pid=%s",os.getpid())
         for sig,handler in previous_handlers.items():
             try: os_signal.signal(sig,handler)
             except (ValueError,OSError): pass

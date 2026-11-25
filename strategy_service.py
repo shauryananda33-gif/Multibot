@@ -173,10 +173,10 @@ class StrategyService:
 
             return self._result(symbol,signal,account_name,"SENT_AND_ACCEPTED",trade=trade,message=message,sent=True,trade_id=trade_id,signal_id=sid)
 
-    def current_price(self,symbol):
+    def current_price(self,symbol,*,priority=5):
         asset=LIVE_ASSET_MAP[symbol]
         try:
-            frame=self.engine.provider.fetch(asset.yahoo_symbol,period="1d",interval="1m",validate_hourly=False)
+            frame=self.engine.provider.fetch(asset.yahoo_symbol,period="1d",interval="1m",validate_hourly=False,priority=priority)
             if frame.empty:
                 return None
             close=frame["close"]
