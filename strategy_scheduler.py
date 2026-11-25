@@ -98,7 +98,9 @@ class StrategyScheduler:
                     "add it to SCHEDULES or use {'type':'interval','seconds':N}."
                 )
             if spec["type"] == "canonical_sweep":
-                return 0
+                # Retain the legacy nominal interval for callers that display
+                # schedule metadata; scanner_loop uses seconds_until_next_due.
+                return 60
             seconds = int(spec["seconds"])
         if seconds <= 0:
             raise ValueError(f"Invalid schedule interval for {strategy.manifest.id}")
