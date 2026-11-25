@@ -60,7 +60,7 @@ def test_dashboard_snapshot_supports_conditional_requests(monkeypatch):
     not_modified, cached_headers, cached_body = _call_dashboard_with_headers(headers["ETag"])
     assert not_modified == "304 Not Modified"
     assert cached_headers["ETag"] == headers["ETag"]
-    assert cached_headers["Content-Length"] == "0"
+    assert "Content-Length" not in cached_headers
     assert cached_body == b""
 
 
