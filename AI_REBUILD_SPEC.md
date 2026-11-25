@@ -872,6 +872,8 @@ candles.py
     Candle frame construction and completion rules.
 yahoo_provider.py
     Yahoo transport and durable cache.
+yahoo_request_coordinator.py
+    Process-wide paced, priority-aware Yahoo request admission.
 bandwidth_metrics.py
     In-memory adapter-level traffic counters for Render bandwidth diagnostics.
 
@@ -956,7 +958,7 @@ tools/check_release_docs.py
     CI: Python 3.12, editable install, compileall, import discovery, pytest.
 ```
 
-26 root modules, 3 registered strategies, 7 dashboard assets. This list is
+27 root modules, 3 registered strategies, 7 dashboard assets. This list is
 enforced by tests/test_rebuild_spec_inventory.py.
 
 ---
