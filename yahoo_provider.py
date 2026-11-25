@@ -78,6 +78,58 @@ class YahooProvider:
             self._cache.pop(key, None)
         return None
 
+    @staticmethod
+    def _period_start(period: str, now: Optional[pd.Timestamp] = None) -> Optional[pd.Timestamp]:
+        """Return a conservative start boundary for common Yahoo period values."""
+        current = now or pd.Timestamp.now(tz="UTC")
+        value = str(period).strip().lower()
+        if value == "ytd":
+            return current.normalize().replace(month=1, day=1)
+        import re
+        match = re.fullmatch(r"(\d+)(d|mo|y)", value)
+        if not match:
+            return None
+        amount, unit = int(match.group(1)), match.group(2)
+        days = amount if unit == "d" else amount * 30 if unit == "mo" else amount * 365
+        return current - pd.Timedelta(days=days)
+
+    def _compatible_cached(self, key: tuple[str, str, str, bool]) -> Optional[pd.DataFrame]:
+        """Reuse a fresh in-memory frame only when it covers the requested window.
+
+        Symbol, interval and validation mode must match. The returned frame is
+        trimmed to the requested lookback so callers see the same history scope
+        they asked Yahoo for.
+        """
+        start = self._period_start(key[1])
+        if start is None:
+            return None
+        now = time.monotonic()
+        candidates = []
+        with self._lock:
+            for other_key, (frame, saved_at) in self._cache.items():
+                if other_key == key:
+                    continue
+                if (other_key[0], other_key[2], other_key[3]) != (key[0], key[2], key[3]):
+                    continue
+                if now - saved_at >= self._ttl(key[2]) or frame.empty:
+                    continue
+                index = frame.index
+                if not isinstance(index, pd.DatetimeIndex) or index.tz is None:
+                    continue
+                if index.min().tz_convert("UTC") <= start:
+                    candidates.append((saved_at, frame))
+        if not candidates:
+            return None
+        _, frame = max(candidates, key=lambda item: item[0])
+        trimmed = frame.loc[frame.index.tz_convert("UTC") >= start].copy()
+        if trimmed.empty:
+            return None
+        logger.info(
+            "Yahoo compatible memory cache hit | symbol=%s requested_period=%s interval=%s",
+            key[0], key[1], key[2],
+        )
+        return trimmed
+
     def _restore_persisted(self, key: tuple[str, str, str, bool]):
         if self._database is None:
             return None
@@ -277,6 +329,14 @@ class YahooProvider:
             if cached is not None:
                 self._mark_provenance(provenance, source="memory_cache", age_seconds=0.0, cache_key=self._key_id(key))
                 return cached
+
+            compatible = self._compatible_cached(key)
+            if compatible is not None:
+                self._mark_provenance(
+                    provenance, source="memory_cache_compatible",
+                    age_seconds=0.0, cache_key=self._key_id(key),
+                )
+                return compatible
 
             persisted = self._restore_persisted(key)
             if persisted is not None:

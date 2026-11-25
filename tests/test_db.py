@@ -57,3 +57,20 @@ def test_load_signal_history_batches_delivery_and_send_state(tmp_path):
         "first_sent_at": "2026-11-22T10:02:00+05:30",
         "last_sent_at": "2026-11-22T10:02:00+05:30",
     }
+
+
+def test_identical_market_cache_payload_does_not_rewrite_timestamp(tmp_path):
+    db = DatabaseManager(str(tmp_path / "cache.db"))
+    db.save_market_data_cache(
+        "RELIANCE.NS|5d|1h|1", "RELIANCE.NS", "5d", "1h", True,
+        '{"close":[100]}', "2026-11-25T10:00:00+00:00",
+    )
+    first = db.load_market_data_cache("RELIANCE.NS|5d|1h|1")
+    db.save_market_data_cache(
+        "RELIANCE.NS|5d|1h|1", "RELIANCE.NS", "5d", "1h", True,
+        '{"close":[100]}', "2026-11-25T10:05:00+00:00",
+    )
+    second = db.load_market_data_cache("RELIANCE.NS|5d|1h|1")
+
+    assert first["updated_at"] == second["updated_at"]
+    assert second["payload"] == '{"close":[100]}'
