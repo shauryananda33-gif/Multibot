@@ -148,6 +148,11 @@ class StrategyScheduler:
             and SCHEDULES[str(schedule)]["type"] == "canonical_sweep"
         )
         if is_canonical:
+            # If a configured event elapsed while the previous scan was
+            # running, return immediately so is_due() can consume it.
+            overdue = list(_canonical_events(last, current))
+            if overdue:
+                return 0.0
             horizon = current + pd.Timedelta(days=8)
             next_events = list(_canonical_events(current, horizon))
             return max(0.0, (next_events[0] - current).total_seconds()) if next_events else 3600.0
