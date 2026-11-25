@@ -8,7 +8,7 @@ import pandas as pd
 from backtest import backtest_strategy
 from config import *
 from dashboard import build_dashboard_snapshot
-from db import DatabaseManager
+from supabase_db import DatabaseManager
 from news import NewsService
 from reminders import ReminderService
 import bot_settings
@@ -1088,14 +1088,13 @@ def _start_leader_workers():
 
 def _validate_runtime_lease_backend():
     # A local SQLite lease cannot coordinate separate deployment containers.
-    # Deployed processes therefore require the shared Turso primary. Local
-    # development can use SQLite; the override is explicit for special cases.
+    # Render must use the shared Supabase Postgres lease; SQLite is local-only.
     allow_local=os.getenv("MULTIBOT_ALLOW_LOCAL_RUNTIME_LEASE","").strip().lower() in {"1","true","yes","on"}
-    if os.getenv("PORT") and not DB.turso_enabled and not allow_local:
+    if os.getenv("PORT") and not DB.supabase_enabled and not allow_local:
         raise RuntimeError(
-            "Turso is required for deployment-wide runtime leadership. "
-            "Configure TURSO_DATABASE_URL and TURSO_AUTH_TOKEN, or explicitly "
-            "set MULTIBOT_ALLOW_LOCAL_RUNTIME_LEASE=true for a single-process test."
+            "Supabase Postgres is required for deployment-wide runtime leadership. "
+            "Configure SUPABASE_DB_URL with the project's Postgres session-pooler "
+            "connection string. SQLite is supported only for local development."
         )
 
 def main():
