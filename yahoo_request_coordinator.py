@@ -23,6 +23,7 @@ class YahooRequestCoordinator:
         deadline = time.monotonic() + self.queue_timeout_seconds
         with self._condition:
             heapq.heappush(self._queue, ticket)
+            self._condition.notify_all()
             while True:
                 now = time.monotonic()
                 if now >= deadline:

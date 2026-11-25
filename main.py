@@ -52,8 +52,8 @@ HTTP_SERVER=None
 
 class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
     """Serve dashboard requests concurrently so one slow API call cannot block the UI."""
-    daemon_threads = True
-    block_on_close = False
+    daemon_threads = False
+    block_on_close = True
     allow_reuse_address = True
 REMINDER_THREAD=None
 WORKER_THREADS={}
