@@ -1,6 +1,6 @@
 """MULTIBOT2 runtime: registry-driven strategies, one shared trade lifecycle."""
 from __future__ import annotations
-import errno, hmac, json, logging, os, signal as os_signal, threading, time, uuid, warnings
+import errno, hashlib, hmac, json, logging, os, signal as os_signal, threading, time, uuid, warnings
 from urllib import parse, request
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer, make_server
@@ -210,6 +210,9 @@ def scanner_loop():
         try:
             run_all_cycles(send=True)
             if SERVICE is not None: SERVICE.notifier.retry_failed()
+        except RuntimeLeadershipError:
+            logger.info("Scanner worker exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception: logger.exception("Strategy scan cycle failed")
         # Sleep until the next configured candle event instead of polling the
         # full strategy universe every minute. The scheduler retains overdue
@@ -228,6 +231,9 @@ def monitor_once():
 def monitor_loop():
     while not STOP.is_set():
         try: monitor_once()
+        except RuntimeLeadershipError:
+            logger.info("Trade monitor worker exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception: logger.exception("Monitor cycle failed")
         STOP.wait(settings.monitor_interval_seconds)
 def _backtest_payload(strategy,symbol,period):
@@ -668,7 +674,22 @@ def summary_loop():
         except Exception: logger.exception("Summary cycle failed")
         STOP.wait(60)
 
-def _json_response(start,payload,status="200 OK"): start(status,[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store")]); return [json.dumps(payload,default=str).encode()]
+def _json_response(start,payload,status="200 OK"):
+    body=json.dumps(payload,default=str,separators=(",",":")).encode()
+    start(status,[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store"),("Content-Length",str(len(body)))])
+    return [body]
+
+def _dashboard_json_response(env,start,payload):
+    """Send a conditional dashboard snapshot; unchanged polls transfer no JSON body."""
+    body=json.dumps(payload,default=str,separators=(",",":")).encode()
+    etag='"'+hashlib.sha256(body).hexdigest()+'"'
+    supplied={value.strip() for value in str(env.get("HTTP_IF_NONE_MATCH","")).split(",") if value.strip()}
+    headers=[("Cache-Control","no-store"),("ETag",etag)]
+    if etag in supplied or "*" in supplied:
+        start("304 Not Modified",headers+[("Content-Length","0")])
+        return []
+    start("200 OK",[("Content-Type","application/json; charset=utf-8")]+headers+[("Content-Length",str(len(body)))])
+    return [body]
 def _settings_response(env,start):
     """GET/POST /api/settings - read or replace accounts, assets and routing.
 
@@ -876,7 +897,7 @@ def build_app():
             try:
                 payload=snapshot()
                 logger.info("Dashboard API request complete | elapsed_ms=%s",round((time.monotonic()-request_started)*1000))
-                return _json_response(start,payload)
+                return _dashboard_json_response(env,start,payload)
             except Exception as exc:
                 logger.exception("Dashboard API request failed | elapsed_ms=%s",round((time.monotonic()-request_started)*1000))
                 return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error")
