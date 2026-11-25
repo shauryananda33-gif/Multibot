@@ -104,6 +104,25 @@ class YahooProvider:
             # The local cooldown remains active if the durable write is unavailable.
             logger.warning("Yahoo provider cooldown persistence failed: %s", exc)
 
+    def _clear_provider_backoff(self) -> None:
+        with self._lock:
+            had_backoff = self._global_failure_count > 0 or self._global_backoff_until > 0
+            self._global_failure_count = 0
+            self._global_backoff_until = 0.0
+        if not had_backoff or self._database is None:
+            return
+        saver = getattr(self._database, "save_app_config", None)
+        if not callable(saver):
+            return
+        try:
+            saver(YAHOO_BACKOFF_CONFIG_KEY, {
+                "until_epoch": 0.0,
+                "failure_count": 0,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as exc:
+            logger.warning("Yahoo provider cooldown reset persistence failed: %s", exc)
+
     def _ttl(self, interval: str) -> float:
         return YF_TTL_BY_INTERVAL.get(interval, 60.0)
 
@@ -270,6 +289,7 @@ class YahooProvider:
             self._last_success[key] = (frame.copy(), now)
             self._failure_count.pop(key[0], None)
             self._backoff_until.pop(key[0], None)
+        self._clear_provider_backoff()
         if self._database is not None:
             # JSON does not permit IEEE NaN/Infinity values. Convert missing
             # numeric cells to JSON null before persisting the cache payload.
@@ -343,7 +363,11 @@ class YahooProvider:
         )
         effective_delay = max(delay, global_delay)
         if provider_wide:
-            self._persist_provider_backoff(global_delay)
+            with self._lock:
+                persisted_delay = max(
+                    0.0, self._global_backoff_until - time.monotonic()
+                )
+            self._persist_provider_backoff(persisted_delay)
         return effective_delay
 
     @staticmethod
