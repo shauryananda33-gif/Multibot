@@ -2,7 +2,7 @@ from pathlib import Path
 
 def test_private_schema_security_migration_enables_rls_for_all_tables():
     root = Path(__file__).resolve().parents[1]
-    path = root / "supabase" / "migrations" / "20261125180000_multibot_security_and_request_coordination.sql"
+    path = root / "supabase" / "migrations" / "20261125175557_multibot_security_and_request_coordination.sql"
     source = path.read_text(encoding="utf-8")
     expected = {
         "accounts", "trades", "signals", "signal_events", "deliveries",
