@@ -389,6 +389,15 @@ class YahooProvider:
             if interval == "1h" and validate_hourly:
                 validate_hourly_observations(frame)
 
+            # This is a decoded DataFrame-size estimate, not exact wire bytes.
+            try:
+                estimated_bytes = int(frame.memory_usage(index=True, deep=True).sum())
+                record_bandwidth(
+                    "yahoo_finance", requests=0, estimated_inbound_bytes=estimated_bytes
+                )
+            except Exception:
+                logger.debug("Yahoo bandwidth estimate unavailable", exc_info=True)
+
             stored = self._store(key, frame)
             self._mark_provenance(provenance, source="fresh", age_seconds=0.0, cache_key=self._key_id(key))
             return stored
