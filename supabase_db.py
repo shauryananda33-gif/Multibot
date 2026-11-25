@@ -102,8 +102,9 @@ class DatabaseManager(_SQLiteDatabaseManager):
     _TRANSIENT_POSTGRES_MARKERS = (
         "connection reset", "connection closed", "server closed the connection",
         "connection is closed", "broken pipe", "timed out", "timeout",
-        "temporarily unavailable", "could not translate host name",
-        "name or service not known", "network is unreachable", "connection refused",
+        "temporarily unavailable", "dns error", "failed to lookup address",
+        "could not translate host name", "name or service not known",
+        "network is unreachable", "connection refused",
         "ssl syscall", "too many connections", "database system is starting up",
         "deadlock detected", "could not serialize access",
     )
