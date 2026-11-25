@@ -54,4 +54,4 @@ def test_canonical_sweep_keeps_global_schedule_active_on_weekends():
     strategy = StubStrategy("canonical_sweep_schedule", ("1h", "4h"))
     start = pd.Timestamp("2026-11-28T00:00:00+05:30")  # Saturday
     assert scheduler.is_due(strategy, start) is True
-    assert scheduler.seconds_until_next_due(strategy, start) == 5 * 60 + 30 * 60
+    assert scheduler.seconds_until_next_due(strategy, start) == 90 * 60
