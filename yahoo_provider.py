@@ -306,7 +306,6 @@ class YahooProvider:
             # yfinance returns parsed DataFrames, not raw response bodies.
             # Count the request and report parsed-frame size as an estimate only.
             from bandwidth_metrics import record as record_bandwidth
-            record_bandwidth("yahoo_finance", requests=1)
             try:
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
@@ -323,6 +322,7 @@ class YahooProvider:
                         threads=False,
                     )
             except Exception as exc:
+                record_bandwidth("yahoo_finance", requests=1)
                 message = str(exc)
                 rate_limited = (
                     "429" in message
@@ -393,7 +393,7 @@ class YahooProvider:
             try:
                 estimated_bytes = int(frame.memory_usage(index=True, deep=True).sum())
                 record_bandwidth(
-                    "yahoo_finance", requests=0, estimated_inbound_bytes=estimated_bytes
+                    "yahoo_finance", requests=1, estimated_inbound_bytes=estimated_bytes
                 )
             except Exception:
                 logger.debug("Yahoo bandwidth estimate unavailable", exc_info=True)
