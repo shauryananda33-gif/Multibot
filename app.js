@@ -8,6 +8,7 @@ const CONFIG=Object.freeze({apiUrl:window.DASHBOARD_API_URL||"/api/dashboard",ti
 // intact and survives a future rename without another edit here.
 const LEGACY_STRATEGY_NAMES=Object.freeze({"Sweep V2":"sweep_v2","Engulfing Entries @ 66 SMA":"engulfing_66_sma","Adaptive Trend Momentum":"adaptive_trend"});
 const state={data:null,lastUpdate:null,activePage:"overview",expanded:new Set(),signalDates:new Set(),historyTradeDates:new Set(),historyScanDates:new Set(),groupInit:new Set(),selectedTrade:null,calendarDate:dateInputValue(new Date()),calendarImpacts:new Set(["All"]),calendarDates:new Set(),calendar:null,backtest:null,settings:null,settingsDirty:false,settingsMessage:null,expandedRules:new Set()};
+let dashboardEtag=null;
 const $=id=>document.getElementById(id);const $$=selector=>Array.from(document.querySelectorAll(selector));
 function escapeHtml(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
 // Calm market-data status for the diagnostics grid: an open scan incident
@@ -266,7 +267,34 @@ async function runBacktest(){const strategy=$("backtestStrategy").value,symbol=$
 async function loadCalendar(){const impact=state.calendarImpacts.has("All")?"All":[...state.calendarImpacts].join(",");$("calendarItems").innerHTML=loadingState(3,"Loading calendar");try{const url=`/api/calendar?${new URLSearchParams({date:state.calendarDate,impact})}`;const response=await adminFetch(url,{cache:"no-store"});state.calendar=await readJsonResponse(response,"Calendar API");renderCalendar();}catch(error){state.calendar={status:"OFFLINE",source:"Forex Factory",message:error.message,items:[],counts:{}};renderCalendar();}}
 async function showConnectionStatus(online,message=""){const banner=$("connectionBanner"),status=$("systemStatus"),badge=$("systemStatusBadge");if(banner){banner.hidden=online;if(!online)banner.innerHTML=`<span>${escapeHtml(message||"Dashboard connection problem.")}</span><button class="secondary-button" type="button" data-retry-dashboard>Retry</button>`;}if(status)status.textContent=online?"ONLINE":"OFFLINE";if(badge)badge.classList.toggle("offline",!online);}
 function renderSafely(name,fn){try{fn();}catch(error){console.error(`Dashboard render failed: ${name}`,error);}}
-function announceSnapshot(payload){const region=$("dashboardAnnouncer");if(!region)return;const c=payload?.counts||{};const health=payload?.health||{};const scan=payload?.scan||{};const message=`Updated. ${number(c.signals,0)} signals, ${number(c.directional_signals,0)} directional, ${number(c.fresh_directional,0)} fresh. ${number(c.open_trades,0)} open trades, ${number(c.closed_trades,0)} closed. Scan ${String(scan.status||"NOT_RUN").toLowerCase()}, ${number(scan.checked,0)} assets checked. Delivery ${String(health.telegram||"DISABLED").toLowerCase()}.`;if(region.textContent!==message)region.textContent=message;}async function loadDashboard(){try{const response=await adminFetch(`${CONFIG.apiUrl}?t=${Date.now()}`,{cache:"no-store"});if(!response.ok)throw new Error(`Dashboard API ${response.status}`);const payload=await readJsonResponse(response,"Dashboard API");if(payload.ok===false)throw new Error(payload?.error||"Dashboard API returned an invalid snapshot.");state.data=payload;state.lastUpdate=payload.generated_at||new Date().toISOString();showConnectionStatus(true);announceSnapshot(payload);renderSafely("overview",renderOverview);renderSafely("scanStatus",renderScanStatus);renderSafely("signals",renderSignals);renderSafely("history",renderHistory);renderSafely("tools",renderTools);if(state.activePage==="calendar")renderSafely("calendar",loadCalendar);}catch(error){console.error("Dashboard load failed",error);showConnectionStatus(false,`Dashboard connection problem: ${error.message}`);}}
+function announceSnapshot(payload){const region=$("dashboardAnnouncer");if(!region)return;const c=payload?.counts||{};const health=payload?.health||{};const scan=payload?.scan||{};const message=`Updated. ${number(c.signals,0)} signals, ${number(c.directional_signals,0)} directional, ${number(c.fresh_directional,0)} fresh. ${number(c.open_trades,0)} open trades, ${number(c.closed_trades,0)} closed. Scan ${String(scan.status||"NOT_RUN").toLowerCase()}, ${number(scan.checked,0)} assets checked. Delivery ${String(health.telegram||"DISABLED").toLowerCase()}.`;if(region.textContent!==message)region.textContent=message;}async function loadDashboard(){
+  try{
+    const headers=dashboardEtag?{"If-None-Match":dashboardEtag}:{};
+    const response=await adminFetch(CONFIG.apiUrl,{cache:"no-store",headers});
+    if(response.status===304){
+      showConnectionStatus(true);
+      return;
+    }
+    if(!response.ok)throw new Error(`Dashboard API ${response.status}`);
+    const etag=response.headers.get("ETag");
+    if(etag)dashboardEtag=etag;
+    const payload=await readJsonResponse(response,"Dashboard API");
+    if(payload.ok===false)throw new Error(payload?.error||"Dashboard API returned an invalid snapshot.");
+    state.data=payload;
+    state.lastUpdate=payload.generated_at||new Date().toISOString();
+    showConnectionStatus(true);
+    announceSnapshot(payload);
+    renderSafely("overview",renderOverview);
+    renderSafely("scanStatus",renderScanStatus);
+    renderSafely("signals",renderSignals);
+    renderSafely("history",renderHistory);
+    renderSafely("tools",renderTools);
+    if(state.activePage==="calendar")renderSafely("calendar",loadCalendar);
+  }catch(error){
+    console.error("Dashboard load failed",error);
+    showConnectionStatus(false,`Dashboard connection problem: ${error.message}`);
+  }
+}
 function setPage(page){
   state.activePage=page;
   $$(".page").forEach(el=>el.classList.toggle("active",el.id===`page-${page}`));
