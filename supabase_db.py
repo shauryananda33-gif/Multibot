@@ -10,10 +10,37 @@ import re
 import time
 import threading
 
+from bandwidth_metrics import record as record_bandwidth
 from db import DatabaseManager as _SQLiteDatabaseManager
 from db import DatabaseError, _RemoteRow
 
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "").strip()
+
+
+def _estimated_value_bytes(value) -> int:
+    """Estimate decoded PostgreSQL payload size without retaining or logging values."""
+    try:
+        if value is None:
+            return 1
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return len(value)
+        if isinstance(value, str):
+            return len(value.encode("utf-8", errors="replace"))
+        if isinstance(value, (int, float, bool)):
+            return len(str(value))
+        if hasattr(value, "isoformat"):
+            return len(value.isoformat().encode("utf-8", errors="replace"))
+        return len(repr(value).encode("utf-8", errors="replace"))
+    except Exception:
+        return 0
+
+
+def _estimated_row_bytes(row) -> int:
+    try:
+        return sum(_estimated_value_bytes(value) for value in row)
+    except Exception:
+        return 0
+
 
 
 def _translate_sql(sql: str) -> str:
@@ -59,6 +86,18 @@ class _PostgresCursor:
     def __init__(self, cursor):
         self._cursor = cursor
 
+    @staticmethod
+    def _record_rows(rows):
+        if rows:
+            try:
+                record_bandwidth(
+                    "supabase_postgres",
+                    estimated_inbound_bytes=sum(_estimated_row_bytes(row) for row in rows),
+                )
+            except Exception:
+                pass
+        return rows
+
     @property
     def description(self):
         return self._cursor.description
@@ -78,14 +117,21 @@ class _PostgresCursor:
         return _RemoteRow(names, row)
 
     def fetchone(self):
-        return self._convert(self._cursor.fetchone())
+        row = self._cursor.fetchone()
+        if row is not None:
+            self._record_rows([row])
+        return self._convert(row)
 
     def fetchall(self):
-        return [self._convert(row) for row in (self._cursor.fetchall() or [])]
+        rows = self._cursor.fetchall() or []
+        self._record_rows(rows)
+        return [self._convert(row) for row in rows]
 
     def fetchmany(self, size=None):
         rows = self._cursor.fetchmany(size) if size is not None else self._cursor.fetchmany()
-        return [self._convert(row) for row in (rows or [])]
+        rows = rows or []
+        self._record_rows(rows)
+        return [self._convert(row) for row in rows]
 
     def __iter__(self):
         while True:
@@ -103,15 +149,33 @@ class _PostgresConnection:
 
     def execute(self, sql, parameters=()):
         try:
-            cursor = self._connection.execute(_translate_sql(sql), tuple(parameters or ()))
+            translated = _translate_sql(sql)
+            params = tuple(parameters or ())
+            cursor = self._connection.execute(translated, params)
+            try:
+                outbound = len(translated.encode("utf-8", errors="replace"))
+                outbound += sum(_estimated_value_bytes(value) for value in params)
+                record_bandwidth("supabase_postgres", outbound_bytes=outbound, requests=1)
+            except Exception:
+                pass
             return _PostgresCursor(cursor)
         except Exception as exc:
             raise DatabaseError(f"Supabase Postgres query failed: {exc}") from exc
 
     def executemany(self, sql, seq_of_parameters):
         try:
+            translated = _translate_sql(sql)
             cursor = self._connection.cursor()
-            cursor.executemany(_translate_sql(sql), seq_of_parameters)
+            cursor.executemany(translated, seq_of_parameters)
+            try:
+                # Do not consume/materialize the caller's iterable just to measure it.
+                record_bandwidth(
+                    "supabase_postgres",
+                    outbound_bytes=len(translated.encode("utf-8", errors="replace")),
+                    requests=1,
+                )
+            except Exception:
+                pass
             return _PostgresCursor(cursor)
         except Exception as exc:
             raise DatabaseError(f"Supabase Postgres batch query failed: {exc}") from exc
