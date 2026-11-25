@@ -872,6 +872,8 @@ candles.py
     Candle frame construction and completion rules.
 yahoo_provider.py
     Yahoo transport and durable cache.
+bandwidth_metrics.py
+    In-memory adapter-level traffic counters for Render bandwidth diagnostics.
 
 # --- trading and research --------------------------------------------------
 trading.py
