@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from strategy_scheduler import StrategyScheduler
@@ -34,3 +35,23 @@ def test_completed_candle_requires_one_timeframe():
 def test_completed_candle_rejects_invalid_timeframe():
     with pytest.raises(ValueError, match="Unsupported strategy timeframe"):
         StrategyScheduler().interval_seconds(StubStrategy("completed_candle", ("bad",)))
+
+
+def test_canonical_sweep_waits_for_configured_completed_candle_event():
+    scheduler = StrategyScheduler()
+    strategy = StubStrategy("canonical_sweep_schedule", ("1h", "4h"))
+    start = pd.Timestamp("2026-11-25T10:00:00+05:30")
+    assert scheduler.is_due(strategy, start) is True
+    assert scheduler.seconds_until_next_due(strategy, start) == 15 * 60
+    assert scheduler.is_due(strategy, start + pd.Timedelta(minutes=14)) is False
+    due = start + pd.Timedelta(minutes=15)
+    assert scheduler.is_due(strategy, due) is True
+    assert scheduler.is_due(strategy, due + pd.Timedelta(seconds=30)) is False
+
+
+def test_canonical_sweep_keeps_global_schedule_active_on_weekends():
+    scheduler = StrategyScheduler()
+    strategy = StubStrategy("canonical_sweep_schedule", ("1h", "4h"))
+    start = pd.Timestamp("2026-11-28T00:00:00+05:30")  # Saturday
+    assert scheduler.is_due(strategy, start) is True
+    assert scheduler.seconds_until_next_due(strategy, start) == 90 * 60
