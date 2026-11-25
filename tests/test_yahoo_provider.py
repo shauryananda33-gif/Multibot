@@ -118,3 +118,58 @@ def test_yahoo_empty_response_only_backs_off_the_affected_symbol(monkeypatch):
     with pytest.raises(yahoo_provider.YahooDataError, match="rate-limit backoff"):
         provider.fetch("GC=F", period="5d", interval="1h")
     assert calls == ["GC=F", "SBIN.NS"]
+
+
+def test_compatible_memory_cache_reuses_larger_fresh_lookback(monkeypatch):
+    calls = []
+
+    def unexpected_download(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("compatible memory cache should avoid Yahoo request")
+
+    monkeypatch.setattr(yahoo_provider.yf, "download", unexpected_download)
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    index = pd.date_range(end=now, periods=120, freq="h")
+    frame = pd.DataFrame(
+        {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5},
+        index=index,
+    )
+    provider._store(("RELIANCE.NS", "5d", "1h", True), frame)
+
+    provenance = {}
+    reused = provider.fetch(
+        "RELIANCE.NS",
+        period="1d",
+        interval="1h",
+        validate_hourly=True,
+        provenance=provenance,
+    )
+
+    assert not reused.empty
+    assert reused.index.min() >= (now - pd.Timedelta(days=1)).tz_convert(reused.index.tz)
+    assert provenance["source"] == "memory_cache_compatible"
+    assert calls == []
+
+
+def test_compatible_memory_cache_never_crosses_symbols_or_intervals(monkeypatch):
+    calls = []
+
+    def fake_download(symbol, **kwargs):
+        calls.append((symbol, kwargs["interval"]))
+        return _fake_download(symbol, **kwargs)
+
+    monkeypatch.setattr(yahoo_provider.yf, "download", fake_download)
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    index = pd.date_range(end=now, periods=120, freq="h")
+    frame = pd.DataFrame(
+        {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5},
+        index=index,
+    )
+    provider._store(("RELIANCE.NS", "5d", "1h", False), frame)
+
+    provider.fetch("SBIN.NS", period="1d", interval="1h", validate_hourly=False)
+    provider.fetch("RELIANCE.NS", period="1d", interval="30m", validate_hourly=False)
+
+    assert calls == [("SBIN.NS", "1h"), ("RELIANCE.NS", "30m")]
