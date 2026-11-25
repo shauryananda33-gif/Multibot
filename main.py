@@ -52,8 +52,8 @@ HTTP_SERVER=None
 
 class ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
     """Serve dashboard requests concurrently so one slow API call cannot block the UI."""
-    daemon_threads = False
-    block_on_close = True
+    daemon_threads = True
+    block_on_close = False
     allow_reuse_address = True
 REMINDER_THREAD=None
 WORKER_THREADS={}
@@ -1205,11 +1205,6 @@ def main():
                 logger.info("Runtime lease released | pid=%s owner=%s",os.getpid(),RUNTIME_OWNER_ID)
             except Exception:
                 logger.exception("Runtime lease release failed | pid=%s",os.getpid())
-            try:
-                DB.close()
-                logger.info("Database connection pool closed | pid=%s",os.getpid())
-            except Exception:
-                logger.exception("Database connection pool close failed | pid=%s",os.getpid())
         for sig,handler in previous_handlers.items():
             try: os_signal.signal(sig,handler)
             except (ValueError,OSError): pass
