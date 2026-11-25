@@ -1002,7 +1002,11 @@ def _handle_command(chat_id,cmd):
             logger.exception("Failed to send Telegram command error response")
 def _telegram_api_call(token,method,payload=None,timeout=15):
     data=parse.urlencode(payload or {}).encode(); req=request.Request(f"https://api.telegram.org/bot{token}/{method}",data=data,method="POST",headers={"Content-Type":"application/x-www-form-urlencoded"})
-    with request.urlopen(req,timeout=timeout) as response: body=json.loads(response.read())
+    with request.urlopen(req,timeout=timeout) as response:
+        response_body=response.read()
+        from bandwidth_metrics import record as record_bandwidth
+        record_bandwidth("telegram_polling",outbound_bytes=len(data),inbound_bytes=len(response_body))
+        body=json.loads(response_body)
     if not body.get("ok"): raise RuntimeError(body.get("description") or f"Telegram API {method} failed")
     return body
 def _prepare_telegram_polling(token):
