@@ -671,6 +671,9 @@ def summary_loop():
         try:
             _require_runtime_leader()
             run_summaries()
+        except RuntimeLeadershipError:
+            logger.info("Summary worker exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception: logger.exception("Summary cycle failed")
         STOP.wait(60)
 
@@ -1038,20 +1041,28 @@ def telegram_commands():
     if not token:return
     try:_prepare_telegram_polling(token)
     except Exception as exc: logger.warning("Telegram polling initialization failed: %s",exc); STOP.wait(30)
-    offset=0; conflict_logged_at=0.0
+    offset=0; conflict_logged_at=0.0; conflict_backoff=30
     while not STOP.is_set():
         try:
+            _require_runtime_leader()
             data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":offset},timeout=30)
+            conflict_backoff=30
             for update in data.get("result",[]):
                 offset=int(update["update_id"])+1; message=update.get("message",{}); chat_id=message.get("chat",{}).get("id"); text=str(message.get("text","")); cmd=text.split()[0].split("@")[0].lower() if text else ""
                 if chat_id and str(chat_id)==str(settings.telegram_chat_id) and cmd: threading.Thread(target=_handle_command,args=(str(chat_id),cmd),daemon=True).start()
+        except RuntimeLeadershipError:
+            logger.info("Telegram command poller exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception as exc:
             msg=str(exc)
             if "409" in msg or "conflict" in msg.lower():
                 t=time.monotonic()
-                if t-conflict_logged_at>=60: logger.warning("Telegram polling conflict: %s",msg); conflict_logged_at=t
-                STOP.wait(30)
-            else: logger.warning("Telegram polling failed: %s",msg); STOP.wait(5)
+                if t-conflict_logged_at>=60: logger.warning("Telegram polling conflict; another getUpdates consumer may be active | retry_in=%ss | error=%s",conflict_backoff,msg); conflict_logged_at=t
+                STOP.wait(conflict_backoff)
+                conflict_backoff=min(conflict_backoff*2,300)
+            else:
+                logger.warning("Telegram polling failed: %s",msg)
+                STOP.wait(5)
 def _telegram_command_polling_enabled():
     # Signal delivery uses sendMessage and does not require getUpdates polling.
     # Polling is opt-in so another Telegram client cannot silently conflict with
