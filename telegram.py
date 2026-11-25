@@ -80,11 +80,10 @@ def reminder_message(original_text): return TelegramMessage("MSG-REMINDER-V1",f"
 def send_message(message,config):
     if not message.text.strip(): raise TelegramTemplateError("Cannot send an empty Telegram message")
     data=parse.urlencode({"chat_id":config.chat_id,"text":message.text,"parse_mode":"Markdown"}).encode(); req=request.Request(f"https://api.telegram.org/bot{config.bot_token}/sendMessage",data=data,method="POST",headers={"Content-Type":"application/x-www-form-urlencoded"})
+    from bandwidth_metrics import record as record_bandwidth
+    record_bandwidth("telegram_send", outbound_bytes=len(data))
     with request.urlopen(req,timeout=15) as response:
         response_body = response.read()
-        from bandwidth_metrics import record as record_bandwidth
-        record_bandwidth(
-            "telegram_send", outbound_bytes=len(data), inbound_bytes=len(response_body)
-        )
+        record_bandwidth("telegram_send", requests=0, inbound_bytes=len(response_body))
         if response.status!=200: raise RuntimeError(f"Telegram API request failed: HTTP {response.status}")
 __all__=["TelegramConfig","TelegramMessage","TelegramConfigurationError","TelegramTemplateError","signal_message_type","render_signal_message","send_message","signal_rejection_message","trade_closed_message","msg_start","msg_whats_new","msg_scan_started","msg_scan_result","msg_scan_error","msg_balance","msg_summary","msg_risk","msg_stats","msg_weekly","msg_test","msg_news_pause","msg_news_refresh","msg_backtest","msg_error","reminder_message","build_trade_fields"]
