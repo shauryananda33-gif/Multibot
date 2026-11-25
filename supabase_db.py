@@ -112,7 +112,7 @@ class _PostgresConnection:
         try:
             cursor = self._connection.cursor()
             cursor.executemany(_translate_sql(sql), seq_of_parameters)
-            return cursor
+            return _PostgresCursor(cursor)
         except Exception as exc:
             raise DatabaseError(f"Supabase Postgres batch query failed: {exc}") from exc
 
