@@ -6,9 +6,11 @@ exponentially after failures, and return recent valid data whenever possible.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import time
+import zlib
 import warnings
 from datetime import datetime, timezone
 from threading import Lock, RLock
@@ -23,11 +25,14 @@ except ImportError:
 
 from candles import validate_hourly_observations
 from config import IST_TIMEZONE
+from yahoo_request_coordinator import GLOBAL_YAHOO_COORDINATOR, YahooRequestQueueTimeout
 
 YF_TTL_BY_INTERVAL = {"1m": 45.0, "30m": 120.0, "1h": 300.0, "4h": 300.0, "1d": 600.0}
 YAHOO_BACKOFF_SECONDS = 120.0
 YAHOO_MAX_BACKOFF_SECONDS = 1800.0
 YAHOO_STALE_GRACE_SECONDS = 900.0
+CACHE_PAYLOAD_PREFIX = "zlib1:"
+YAHOO_BACKOFF_CONFIG_KEY = "yahoo_provider_backoff_v1"
 
 
 class YahooDataError(RuntimeError):
@@ -55,9 +60,84 @@ class YahooProvider:
         self._global_failure_count = 0
         self._symbol_locks: dict[str, Lock] = {}
         self._lock = RLock()
+        self._restore_provider_backoff()
+
+    def _restore_provider_backoff(self) -> None:
+        """Restore a provider-wide cooldown across process restarts.
+
+        The active runtime lease fences market-data work to one leader. Persisting
+        the cooldown lets a replacement leader inherit a Yahoo throttle instead
+        of immediately repeating the request after a restart.
+        """
+        if self._database is None:
+            return
+        loader = getattr(self._database, "load_app_config", None)
+        if not callable(loader):
+            return
+        try:
+            state = loader(YAHOO_BACKOFF_CONFIG_KEY)
+            if not isinstance(state, dict):
+                return
+            remaining = float(state.get("until_epoch", 0.0)) - time.time()
+            if remaining <= 0:
+                return
+            with self._lock:
+                self._global_backoff_until = time.monotonic() + remaining
+                self._global_failure_count = max(0, int(state.get("failure_count", 0)))
+            logger.info("Restored persisted Yahoo provider cooldown | retry_in=%ds", int(remaining))
+        except Exception as exc:
+            logger.warning("Yahoo provider cooldown restore failed; continuing with local state: %s", exc)
+
+    def _persist_provider_backoff(self, delay: float) -> None:
+        if self._database is None:
+            return
+        saver = getattr(self._database, "save_app_config", None)
+        if not callable(saver):
+            return
+        try:
+            saver(YAHOO_BACKOFF_CONFIG_KEY, {
+                "until_epoch": time.time() + max(0.0, float(delay)),
+                "failure_count": self._global_failure_count,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as exc:
+            # The local cooldown remains active if the durable write is unavailable.
+            logger.warning("Yahoo provider cooldown persistence failed: %s", exc)
+
+    def _clear_provider_backoff(self) -> None:
+        with self._lock:
+            had_backoff = self._global_failure_count > 0 or self._global_backoff_until > 0
+            self._global_failure_count = 0
+            self._global_backoff_until = 0.0
+        if not had_backoff or self._database is None:
+            return
+        saver = getattr(self._database, "save_app_config", None)
+        if not callable(saver):
+            return
+        try:
+            saver(YAHOO_BACKOFF_CONFIG_KEY, {
+                "until_epoch": 0.0,
+                "failure_count": 0,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as exc:
+            logger.warning("Yahoo provider cooldown reset persistence failed: %s", exc)
 
     def _ttl(self, interval: str) -> float:
         return YF_TTL_BY_INTERVAL.get(interval, 60.0)
+
+    @staticmethod
+    def _record_cache_event(*, hit: bool = False, miss: bool = False) -> None:
+        try:
+            from bandwidth_metrics import record as record_bandwidth
+            record_bandwidth(
+                "yahoo_cache",
+                requests=0,
+                cache_hits=int(bool(hit)),
+                cache_misses=int(bool(miss)),
+            )
+        except Exception:
+            logger.debug("Yahoo cache telemetry unavailable", exc_info=True)
 
     @staticmethod
     def _key_id(key: tuple[str, str, str, bool]) -> str:
@@ -153,7 +233,20 @@ class YahooProvider:
             age = (datetime.now(timezone.utc) - updated.to_pydatetime().astimezone(timezone.utc)).total_seconds()
             if age > YAHOO_STALE_GRACE_SECONDS:
                 return None
-            payload = json.loads(row["payload"])
+            stored_payload = str(row["payload"])
+            from bandwidth_metrics import record as record_bandwidth
+            record_bandwidth(
+                "supabase_market_cache",
+                requests=1,
+                estimated_inbound_bytes=len(stored_payload.encode("utf-8")),
+            )
+            if stored_payload.startswith(CACHE_PAYLOAD_PREFIX):
+                encoded = stored_payload[len(CACHE_PAYLOAD_PREFIX):]
+                decoded = zlib.decompress(base64.b64decode(encoded)).decode("utf-8")
+            else:
+                # Read existing plain-JSON rows during the compatibility window.
+                decoded = stored_payload
+            payload = json.loads(decoded)
             frame = pd.DataFrame(payload["data"], columns=payload["columns"])
             frame.index = pd.to_datetime(payload["index"], utc=True).tz_convert(IST_TIMEZONE)
             logger.info("Yahoo persistent cache hit | symbol=%s age_seconds=%d", key[0], int(age))
@@ -209,6 +302,7 @@ class YahooProvider:
             self._last_success[key] = (frame.copy(), now)
             self._failure_count.pop(key[0], None)
             self._backoff_until.pop(key[0], None)
+        self._clear_provider_backoff()
         if self._database is not None:
             # JSON does not permit IEEE NaN/Infinity values. Convert missing
             # numeric cells to JSON null before persisting the cache payload.
@@ -219,9 +313,21 @@ class YahooProvider:
                 "data": safe_frame.values.tolist(),
             }
             try:
+                serialized = json.dumps(
+                    payload, separators=(",", ":"), default=str, allow_nan=False
+                )
+                compressed = CACHE_PAYLOAD_PREFIX + base64.b64encode(
+                    zlib.compress(serialized.encode("utf-8"), level=6)
+                ).decode("ascii")
+                from bandwidth_metrics import record as record_bandwidth
+                record_bandwidth(
+                    "supabase_market_cache",
+                    requests=1,
+                    outbound_bytes=len(compressed.encode("utf-8")),
+                )
                 self._database.save_market_data_cache(
                     self._key_id(key), key[0], key[1], key[2], key[3],
-                    json.dumps(payload, separators=(",", ":"), default=str, allow_nan=False),
+                    compressed,
                     datetime.now(timezone.utc).isoformat(),
                 )
                 logger.info("Yahoo persistent cache saved | symbol=%s key=%s", key[0], self._key_id(key))
@@ -268,7 +374,14 @@ class YahooProvider:
             symbol, failures, int(max(delay, global_delay)),
             "provider" if provider_wide else "symbol", reason,
         )
-        return max(delay, global_delay)
+        effective_delay = max(delay, global_delay)
+        if provider_wide:
+            with self._lock:
+                persisted_delay = max(
+                    0.0, self._global_backoff_until - time.monotonic()
+                )
+            self._persist_provider_backoff(persisted_delay)
+        return effective_delay
 
     @staticmethod
     def _validate_request(period: str, interval: str) -> None:
@@ -309,6 +422,7 @@ class YahooProvider:
         interval: str = "1h",
         validate_hourly: bool = True,
         provenance: Optional[dict] = None,
+        priority: int = 5,
     ) -> pd.DataFrame:
         """Fetch Yahoo candles with cache-first, deduplication and backoff."""
         if yf is None:
@@ -319,6 +433,7 @@ class YahooProvider:
 
         cached = self._cached(key)
         if cached is not None:
+            self._record_cache_event(hit=True)
             self._mark_provenance(provenance, source="memory_cache", age_seconds=0.0, cache_key=self._key_id(key))
             return cached
 
@@ -327,11 +442,13 @@ class YahooProvider:
             # Another concurrent caller may have completed while we waited.
             cached = self._cached(key)
             if cached is not None:
+                self._record_cache_event(hit=True)
                 self._mark_provenance(provenance, source="memory_cache", age_seconds=0.0, cache_key=self._key_id(key))
                 return cached
 
             compatible = self._compatible_cached(key)
             if compatible is not None:
+                self._record_cache_event(hit=True)
                 self._mark_provenance(
                     provenance, source="memory_cache_compatible",
                     age_seconds=0.0, cache_key=self._key_id(key),
@@ -342,6 +459,7 @@ class YahooProvider:
             if persisted is not None:
                 frame, age = persisted
                 if age <= self._ttl(interval):
+                    self._record_cache_event(hit=True)
                     now = time.monotonic()
                     with self._lock:
                         self._cache[key] = (frame.copy(), now)
@@ -349,6 +467,7 @@ class YahooProvider:
                     self._mark_provenance(provenance, source="persisted_cache", age_seconds=round(age, 1), cache_key=self._key_id(key))
                     return frame.copy()
 
+            self._record_cache_event(miss=True)
             retry_in = self._in_backoff(symbol)
             if retry_in > 0:
                 stale = self._stale(key)
@@ -373,15 +492,26 @@ class YahooProvider:
                         message="The .*generic.* unit for NumPy timedelta is deprecated.*",
                         category=DeprecationWarning,
                     )
-                    frame = yf.download(
-                        symbol,
-                        period=period,
-                        interval=interval,
-                        progress=False,
-                        auto_adjust=True,
-                        threads=False,
+                    frame = GLOBAL_YAHOO_COORDINATOR.run(
+                        lambda: yf.download(
+                            symbol,
+                            period=period,
+                            interval=interval,
+                            progress=False,
+                            auto_adjust=True,
+                            threads=False,
+                        ),
+                        priority=priority,
                     )
             except Exception as exc:
+                if isinstance(exc, YahooRequestQueueTimeout):
+                    stale = self._stale(key)
+                    if stale is not None:
+                        self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
+                        return stale
+                    raise YahooDataError(
+                        f"Yahoo request was not admitted before queue timeout for {symbol}"
+                    ) from exc
                 record_bandwidth("yahoo_finance", requests=1)
                 message = str(exc)
                 rate_limited = (
@@ -470,8 +600,14 @@ class YahooProvider:
         with self._lock:
             now = time.monotonic()
             if symbol is not None:
-                return now < self._backoff_until.get(symbol, 0.0)
-            return any(now < until for until in self._backoff_until.values())
+                return now < max(
+                    self._backoff_until.get(symbol, 0.0),
+                    self._global_backoff_until,
+                )
+            return (
+                now < self._global_backoff_until
+                or any(now < until for until in self._backoff_until.values())
+            )
 
 
 _default_provider = YahooProvider()

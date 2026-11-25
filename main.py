@@ -1,6 +1,6 @@
 """MULTIBOT2 runtime: registry-driven strategies, one shared trade lifecycle."""
 from __future__ import annotations
-import errno, hmac, json, logging, os, signal as os_signal, threading, time, uuid, warnings
+import errno, hashlib, hmac, json, logging, os, signal as os_signal, threading, time, uuid, warnings
 from urllib import parse, request
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer, make_server
@@ -93,7 +93,7 @@ def ensure_runtime():
     if not ACCOUNTS: init_state()
     if REGISTRY is None: REGISTRY=discover_strategies()
     if SERVICE is None: SERVICE=StrategyService(registry=REGISTRY,provider=YahooProvider(database=DB),database=DB,accounts=ACCOUNTS,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader)
-    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol),accounts=ACCOUNTS)
+    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol,priority=0),accounts=ACCOUNTS)
     if REMINDERS is None and settings.telegram_bot_token and settings.telegram_chat_id: REMINDERS=ReminderService(DB)
     with LOCK:
         for st in REGISTRY.all():
@@ -210,6 +210,9 @@ def scanner_loop():
         try:
             run_all_cycles(send=True)
             if SERVICE is not None: SERVICE.notifier.retry_failed()
+        except RuntimeLeadershipError:
+            logger.info("Scanner worker exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception: logger.exception("Strategy scan cycle failed")
         # Sleep until the next configured candle event instead of polling the
         # full strategy universe every minute. The scheduler retains overdue
@@ -228,6 +231,9 @@ def monitor_once():
 def monitor_loop():
     while not STOP.is_set():
         try: monitor_once()
+        except RuntimeLeadershipError:
+            logger.info("Trade monitor worker exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception: logger.exception("Monitor cycle failed")
         STOP.wait(settings.monitor_interval_seconds)
 def _backtest_payload(strategy,symbol,period):
@@ -665,10 +671,28 @@ def summary_loop():
         try:
             _require_runtime_leader()
             run_summaries()
+        except RuntimeLeadershipError:
+            logger.info("Summary worker exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception: logger.exception("Summary cycle failed")
         STOP.wait(60)
 
-def _json_response(start,payload,status="200 OK"): start(status,[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store")]); return [json.dumps(payload,default=str).encode()]
+def _json_response(start,payload,status="200 OK"):
+    body=json.dumps(payload,default=str,separators=(",",":")).encode()
+    start(status,[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store"),("Content-Length",str(len(body)))])
+    return [body]
+
+def _dashboard_json_response(env,start,payload):
+    """Send a conditional dashboard snapshot; unchanged polls transfer no JSON body."""
+    body=json.dumps(payload,default=str,separators=(",",":")).encode()
+    etag='"'+hashlib.sha256(body).hexdigest()+'"'
+    supplied={value.strip() for value in str(env.get("HTTP_IF_NONE_MATCH","")).split(",") if value.strip()}
+    headers=[("Cache-Control","no-store"),("ETag",etag)]
+    if etag in supplied or "*" in supplied:
+        start("304 Not Modified",headers)
+        return []
+    start("200 OK",[("Content-Type","application/json; charset=utf-8")]+headers+[("Content-Length",str(len(body)))])
+    return [body]
 def _settings_response(env,start):
     """GET/POST /api/settings - read or replace accounts, assets and routing.
 
@@ -876,7 +900,7 @@ def build_app():
             try:
                 payload=snapshot()
                 logger.info("Dashboard API request complete | elapsed_ms=%s",round((time.monotonic()-request_started)*1000))
-                return _json_response(start,payload)
+                return _dashboard_json_response(env,start,payload)
             except Exception as exc:
                 logger.exception("Dashboard API request failed | elapsed_ms=%s",round((time.monotonic()-request_started)*1000))
                 return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error")
@@ -1017,20 +1041,28 @@ def telegram_commands():
     if not token:return
     try:_prepare_telegram_polling(token)
     except Exception as exc: logger.warning("Telegram polling initialization failed: %s",exc); STOP.wait(30)
-    offset=0; conflict_logged_at=0.0
+    offset=0; conflict_logged_at=0.0; conflict_backoff=30
     while not STOP.is_set():
         try:
+            _require_runtime_leader()
             data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":offset},timeout=30)
+            conflict_backoff=30
             for update in data.get("result",[]):
                 offset=int(update["update_id"])+1; message=update.get("message",{}); chat_id=message.get("chat",{}).get("id"); text=str(message.get("text","")); cmd=text.split()[0].split("@")[0].lower() if text else ""
                 if chat_id and str(chat_id)==str(settings.telegram_chat_id) and cmd: threading.Thread(target=_handle_command,args=(str(chat_id),cmd),daemon=True).start()
+        except RuntimeLeadershipError:
+            logger.info("Telegram command poller exiting after leadership loss | pid=%s",os.getpid())
+            break
         except Exception as exc:
             msg=str(exc)
             if "409" in msg or "conflict" in msg.lower():
                 t=time.monotonic()
-                if t-conflict_logged_at>=60: logger.warning("Telegram polling conflict: %s",msg); conflict_logged_at=t
-                STOP.wait(30)
-            else: logger.warning("Telegram polling failed: %s",msg); STOP.wait(5)
+                if t-conflict_logged_at>=60: logger.warning("Telegram polling conflict; another getUpdates consumer may be active | retry_in=%ss | error=%s",conflict_backoff,msg); conflict_logged_at=t
+                STOP.wait(conflict_backoff)
+                conflict_backoff=min(conflict_backoff*2,300)
+            else:
+                logger.warning("Telegram polling failed: %s",msg)
+                STOP.wait(5)
 def _telegram_command_polling_enabled():
     # Signal delivery uses sendMessage and does not require getUpdates polling.
     # Polling is opt-in so another Telegram client cannot silently conflict with

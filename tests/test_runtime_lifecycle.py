@@ -91,8 +91,8 @@ def test_deployment_entrypoints_are_consistent():
     assert "from main import main as runtime_main" in legacy
     assert "telegram_send" not in legacy
     assert "./.venv/bin/python main.py" in readme
-    assert "https://multibot-1d1fdf1c.appliedintelligencecorporation.com/dashboard" in telegram
-    assert "https://multibot-1d1fdf1c.appliedintelligencecorporation.com/architecture" in telegram
+    assert "DASHBOARD_URL" in telegram and "https://multibot-3hsb.onrender.com/dashboard" in telegram
+    assert "ARCHITECTURE_URL" in telegram and "https://multibot-3hsb.onrender.com/architecture" in telegram
 
 
 def test_runtime_lease_is_part_of_the_shared_schema():
@@ -307,3 +307,20 @@ def test_remote_connection_wraps_statement_error_without_masking_it():
     with pytest.raises(db_module.DatabaseError, match="stream was idle for too long"):
         with remote as connection:
             connection.execute("UPDATE runtime_leases SET owner_id=?",("process-a",))
+
+
+def test_operational_worker_loops_exit_cleanly_after_leadership_loss(monkeypatch):
+    stop = threading.Event()
+    monkeypatch.setattr(main, "STOP", stop)
+
+    def lost(*args, **kwargs):
+        raise RuntimeLeadershipError("lease lost")
+
+    monkeypatch.setattr(main, "run_all_cycles", lost)
+    main.scanner_loop()
+
+    monkeypatch.setattr(main, "monitor_once", lost)
+    main.monitor_loop()
+
+    monkeypatch.setattr(main, "_require_runtime_leader", lost)
+    main.summary_loop()

@@ -389,3 +389,10 @@ def test_dashboard_http_server_handles_requests_concurrently():
     assert "class ThreadingWSGIServer(ThreadingMixIn, WSGIServer)" in source
     assert "daemon_threads = True" in source
     assert "server_class=ThreadingWSGIServer" in source
+
+def test_dashboard_polling_uses_etag_instead_of_unique_cache_busting_urls():
+    assert "let dashboardEtag=null" in APP
+    assert 'headers=dashboardEtag?{"If-None-Match":dashboardEtag}:{}' in APP
+    assert 'response.status===304' in APP
+    assert "adminFetch(CONFIG.apiUrl,{cache:\"no-store\",headers})" in APP
+    assert "${CONFIG.apiUrl}?t=${Date.now()}" not in APP

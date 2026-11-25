@@ -32,6 +32,38 @@ def _call(method, path, *, origin=None, host="localhost:3000", forwarded=None,
     return captured["status"], payload
 
 
+def _call_dashboard_with_headers(if_none_match=None):
+    app = main.build_app()
+    env = {
+        "PATH_INFO": "/api/dashboard", "REQUEST_METHOD": "GET",
+        "HTTP_HOST": "localhost:3000", "CONTENT_LENGTH": "0",
+        "wsgi.input": io.BytesIO(b""), "wsgi.errors": io.StringIO(),
+        "wsgi.url_scheme": "http", "SERVER_NAME": "localhost",
+        "SERVER_PORT": "3000",
+    }
+    if if_none_match is not None:
+        env["HTTP_IF_NONE_MATCH"] = if_none_match
+    captured = {}
+    chunks = app(env, lambda status, headers: captured.update(status=status, headers=dict(headers)))
+    return captured["status"], captured["headers"], b"".join(chunks)
+
+
+def test_dashboard_snapshot_supports_conditional_requests(monkeypatch):
+    payload = {"ok": True, "generated_at": "2026-11-26T10:00:00+05:30", "signals": []}
+    monkeypatch.setattr(main, "snapshot", lambda: payload)
+    status, headers, body = _call_dashboard_with_headers()
+    assert status == "200 OK"
+    assert headers["ETag"].startswith('"') and headers["ETag"].endswith('"')
+    assert json.loads(body) == payload
+    assert int(headers["Content-Length"]) == len(body)
+
+    not_modified, cached_headers, cached_body = _call_dashboard_with_headers(headers["ETag"])
+    assert not_modified == "304 Not Modified"
+    assert cached_headers["ETag"] == headers["ETag"]
+    assert "Content-Length" not in cached_headers
+    assert cached_body == b""
+
+
 def test_registry_is_strategy_driven():
     main.ensure_runtime()
     assert set(main.REGISTRY.ids()) == {"adaptive_trend", "sweep_v2", "engulfing_66_sma"}
