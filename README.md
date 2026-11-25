@@ -415,13 +415,13 @@ Every deployment uses one canonical entrypoint: `main.py`. The runtime acquires 
 
 ```bash
 pip install -e ".[test]"
-python main.py
+./.venv/bin/python main.py
 ```
 
 Render executes the canonical entrypoint:
 
 ```text
-python main.py
+./.venv/bin/python main.py
 ```
 
 `startup.py` remains only as a backward-compatible launcher and delegates to `main.py`; it never sends a separate startup message or starts a second runtime.
