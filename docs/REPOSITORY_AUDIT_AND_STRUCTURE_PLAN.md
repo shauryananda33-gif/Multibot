@@ -546,3 +546,12 @@ Specific missing or misleading coverage:
 The two schema snapshots are historical public-schema SQL, not the current private `multibot` schema created by the migrations. Their comments are stale. The test named schema parity is also stale and does not validate migration parity. These files should not be used as a basis for any new production migration.
 
 The frontend asset-size figures in this plan are repository sizes, not measured Render egress. The current external-host routing must be verified before using those figures in a Render bandwidth budget.
+
+
+### Runtime lease transient-failure policy
+
+The per-operation runtime guard has a transient verification grace window, but the main lease-heartbeat loop is stricter: any exception from `renew_runtime_lease()` is treated as immediate leadership loss, sets STOP and shuts the process down. This may be the correct fail-closed choice, but it means the guard's grace window does not protect the process from heartbeat transport failures. The policy must be explicit and tested against the 60-second lease TTL; do not simply continue trading through an unverified lease.
+
+### Manual scan serialization
+
+The scheduled scanner and Telegram `/scan` both call `run_all_cycles()`, and each Telegram update is dispatched on its own thread. There is no lock around the whole run_all_cycles/strategy-cycle operation. Add a single scan-cycle admission lock so manual and scheduled scans cannot overlap. The Yahoo provider's per-symbol lock/cache is a useful secondary safeguard, not a substitute for cycle ownership.
