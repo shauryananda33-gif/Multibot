@@ -85,6 +85,7 @@ def test_compressed_persisted_cache_restores_and_legacy_json_remains_readable():
         {"open": [100.0], "high": [101.0], "low": [99.0], "close": [100.5]},
         index=pd.DatetimeIndex(["2026-09-22 10:00:00+05:30"]),
     )
+    frame.index = frame.index.tz_convert("Asia/Kolkata")
     raw = json.dumps({
         "columns": list(frame.columns),
         "index": [x.isoformat() for x in frame.index],
