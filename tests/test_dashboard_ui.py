@@ -1,0 +1,391 @@
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+HTML = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+CSS = (ROOT / "styles.css").read_text(encoding="utf-8")
+APP = (ROOT / "app.js").read_text(encoding="utf-8")
+
+
+def test_dashboard_keeps_approved_theme_and_mobile_contract():
+    assert 'data-theme="light"' in HTML
+    assert 'data-style="modern"' in HTML
+    assert 'html[data-theme="dark"]' in CSS
+    assert 'html[data-style="neo"]' in CSS
+    assert 'prefers-reduced-motion: reduce' in CSS
+    assert 'position: fixed' in CSS or 'position:fixed' in CSS
+    assert 'bottom: 7px' in CSS or 'bottom:7px' in CSS
+
+
+def test_dashboard_keeps_trading_presentation_layers_separate():
+    assert '/api/dashboard' in HTML or '/api/dashboard' in APP
+    assert 'signal-card' in CSS
+    assert 'trade-card' in CSS
+    assert 'news-item' in CSS
+    assert 'backtest-chart' in CSS
+    assert 'No FVG' not in HTML
+
+
+def test_dashboard_has_clear_visual_hierarchy_tokens():
+    for token in (
+        '--surface',
+        '--surface-2',
+        '--accent',
+        '--positive',
+        '--negative',
+        '--warning',
+        '--shadow',
+        '--radius',
+    ):
+        assert token in CSS
+
+    for selector in (
+        '.topbar',
+        '.desktop-nav',
+        '.page-heading',
+        '.hero',
+        '.box',
+        '.signal-card',
+        '.trade-card',
+        '.news-item',
+    ):
+        assert selector in CSS
+
+
+def test_dashboard_does_not_recalculate_execution_risk_or_freshness():
+    assert 'Math.abs(Number(plan.entry)' not in APP
+    assert 'riskPerUnit*qty' not in APP
+    assert 'Date.now()-new Date(value)' not in APP
+    assert 'freshnessMs' not in APP
+    assert 'function ageLabel' not in APP
+
+
+def test_dashboard_uses_canonical_calendar_and_history_placement():
+    assert 'data-page="calendar"' in HTML
+    assert 'page-calendar' in HTML
+    assert 'page-news' not in HTML
+    assert 'calendarRefreshButton' in HTML
+    assert 'newsRefreshButton' not in HTML
+    assert 'SCAN ACTIVITY' not in HTML
+    assert 'data-page="trades"' not in HTML
+    assert 'page-trades' not in HTML
+    assert 'state.activePage==="calendar"' in APP
+
+
+def test_dashboard_resolves_friendly_names_and_canonical_signal_presentation():
+    assert 'function assetLabel' in APP
+    assert 'function strategyLabel' in APP
+    assert 'function canonicalSignals' in APP
+    assert 'supportedBacktestAssets' in APP
+    assert 'signal.timeframe||strategyInfo(signal.strategy)?.timeframes?.[0]' in APP
+
+
+def test_dashboard_does_not_show_global_scan_panel():
+    assert '<section class="panel"><div class="section-head"><div><h2>Scan History</h2>' not in HTML
+
+
+def test_dashboard_contract_uses_date_grouped_signals_without_filters():
+    assert 'data-signal-filter=' not in HTML
+    assert 'data-signal-direction=' not in HTML
+    assert 'renderSignalDateGroups' in APP
+    assert 'canonicalSignals' in APP
+
+
+def test_dashboard_contract_exposes_directional_signal_summary():
+    source=(ROOT / "dashboard.py").read_text(encoding="utf-8")
+    assert 'signal_summary' in source
+    assert 'stale_directional' in source
+    assert 'fresh_directional' in source
+
+
+def test_dashboard_runtime_keeps_core_functions_after_ui_cleanup():
+    required = ["function loadDashboard", "function bindEvents", "function bindEvent", "function renderHistory", "function renderCalendar", "function renderTools", "function applyAppearanceControls", "$$(\'[data-page]\')"]
+    for token in required:
+        assert token in APP
+    assert APP.index("function bindEvents") < APP.index("loadDashboard();")
+
+
+def test_dashboard_selector_helpers_and_bootstrap_cannot_block_runtime():
+    assert "function bootstrapDashboard()" in APP
+    assert "initAppearance();bindEvents();" in APP
+    assert "loadDashboard();" in APP
+    assert "$$('[data-page]')" in APP
+    assert "$$('[data-theme-choice]')" in APP
+    assert "$$('[data-style-choice]')" in APP
+    assert "const $=id=>document.getElementById(id)" in APP
+    assert "$('[data-page]')" in APP
+    assert "$('[data-theme-choice]')" in APP
+
+
+def test_dashboard_has_exactly_five_navigation_slots():
+    for page in ('overview','signals','history','calendar','tools'):
+        assert f'data-page="{page}"' in HTML
+    assert 'grid-template-columns:repeat(5,1fr)' in CSS or 'grid-template-columns:repeat(5,minmax(0,1fr))' in CSS
+
+
+def test_tools_workspace_uses_rebuilt_sections_and_simple_backtest_asset_names():
+    # `tool-runtime` is gone: the Diagnostics card was read-only telemetry that
+    # the topbar status badge and the release modal already carried, and it cost
+    # a whole Tools card. Its stylesheet rules remain, unreferenced by markup.
+    for token in ('tools-layout', 'tool-backtest', 'tool-universe', 'tool-accounts', 'tool-rules'):
+        assert token in HTML
+    assert '${escapeHtml(asset.label)} · ${escapeHtml(asset.ticker)}' not in APP
+    assert '<option value="${escapeHtml(asset.key||asset.ticker)}">${escapeHtml(asset.label)}</option>' in APP
+
+
+def test_dashboard_uses_equity_curves_for_primary_performance():
+    assert 'id="equityCurveChart"' in HTML
+    assert 'Equity curve' in HTML
+    assert 'function renderEquityLine' in APP
+    assert 'id="styleToggle"' not in HTML
+    assert 'id="themeToggle"' in HTML
+    assert 'equity_curve' in (ROOT / "main.py").read_text(encoding="utf-8")
+
+
+def test_dashboard_keeps_backtest_primary_chart_as_equity_curve():
+    assert 'Backtest equity curve' in APP
+    assert 'Paper account value after each completed backtest trade' in APP
+    assert 'Signals by day' not in APP[APP.index('function renderBacktest'):APP.index('async function runBacktest')]
+
+
+def test_dashboard_mobile_navigation_is_compact():
+    assert 'min-height:48px' in CSS
+    assert 'grid-template-columns:repeat(5' in CSS
+
+
+def test_dashboard_backtest_metrics_and_trades_are_bounded_and_separated():
+    source=(ROOT / "app.js").read_text(encoding="utf-8")
+    assert "formatBacktestMetric" in source
+    assert "Completed trades" in source
+    assert "backtest-trade-row" in source
+    assert "Number.isFinite(n)" in source
+
+
+def test_backtest_ratio_metrics_are_bounded():
+    source=(ROOT / "backtest.py").read_text(encoding="utf-8")
+    assert "def _bounded_ratio" in source
+    assert "return 10.0 if mean>0 else 0.0" in source
+    assert "risk_adjusted_performance" in source
+
+
+def test_dashboard_consistency_pass_keeps_sections_contained_and_trade_lists_scrollable():
+    # Containment geometry is owned by foundation.css and component layout by
+    # styles.css (see DESIGN.md), so assert the contract across both surfaces.
+    surfaces = CSS + (ROOT / "foundation.css").read_text(encoding="utf-8")
+    for token in (
+        '--section-gap',
+        '--card-pad',
+        '.signals-workspace',
+        '.history-workspace',
+        '.calendar-workspace',
+        '.tool-card',
+        '.backtest-section',
+        '.backtest-trades',
+        '.backtest-signal-list',
+        'max-height:560px',
+        'overflow-y:auto',
+        'min-width:0',
+        'overflow-wrap:anywhere',
+    ):
+        assert token in surfaces
+
+
+def test_dashboard_pass1_foundation_contract_is_defined_without_migrating_components():
+    foundation=(ROOT / "foundation.css").read_text(encoding="utf-8")
+    for token in (
+        "--ui-space-1",
+        "--ui-space-6",
+        "--ui-section-gap",
+        "--ui-grid-gap",
+        "--ui-card-pad",
+        "--ui-control-height",
+        "--ui-radius-medium",
+        "--ui-border-width",
+        "--ui-mobile-nav-height",
+        "--ui-collapse-size",
+        "--ui-collapse-radius",
+        "--ui-collapse-border",
+        "--ui-collapse-icon-size",
+        "--ui-collapse-icon-weight",
+    ):
+        assert token in foundation
+    assert "--ui-collapse-size:32px" in foundation
+    assert "--ui-collapse-radius:10px" in foundation
+    assert "--ui-collapse-icon-size:7px" in foundation
+
+
+def test_dashboard_pass2_uses_one_collapse_control_contract():
+    foundation=(ROOT / "foundation.css").read_text(encoding="utf-8")
+    html=(ROOT / "dashboard.html").read_text(encoding="utf-8")
+    app=(ROOT / "app.js").read_text(encoding="utf-8")
+    live=(ROOT / "dashboard-live-wiring.js").read_text(encoding="utf-8")
+    styles=(ROOT / "styles.css").read_text(encoding="utf-8")
+    assert ".collapse-control::after" in foundation
+    assert "transform:translateY(-2px) rotate(45deg)" in foundation
+    assert "rotate(180deg)" not in foundation
+    assert "rotate(180deg)" not in styles
+    assert "aria-hidden=\"true\" tabindex=\"-1\"" not in app
+    assert "tabindex=\"-1\" aria-hidden" not in app
+    # The expand control is THE interactive element: it must stay focusable and
+    # visible to assistive technology, in either attribute order.
+    expand_line = next(line for line in app.splitlines() if "function expandButton" in line)
+    assert "aria-hidden" not in expand_line
+    assert "tabindex" not in expand_line
+    assert "aria-expanded" in expand_line and "aria-label" in expand_line
+    # One canonical control: the card wrapper is a pointer affordance, not a
+    # second focusable button competing with the real <button>.
+    assert "role=\"button\"" not in app
+    assert "class=\"collapse-chev" not in html
+    assert "class=\"chev collapse-control\"" not in app
+    assert "class=\"chev collapse-control\"" not in live
+    assert "collapse-control" in html
+
+
+def test_dashboard_pass2_collapse_state_is_shared_across_tools_and_date_groups():
+    foundation=(ROOT / "foundation.css").read_text(encoding="utf-8")
+    appearance=(ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
+    app=(ROOT / "app.js").read_text(encoding="utf-8")
+
+    assert '[aria-expanded="true"] > .collapse-control::after' in foundation
+    assert '.collapse-control[aria-expanded="true"]::after' in foundation
+    assert '#page-signals .signal-date-toggle .collapse-control' in foundation
+    assert '#page-history .history-date-toggle .collapse-control' in foundation
+    assert '#page-calendar .calendar-date-toggle .collapse-control' in foundation
+    assert 'transform:translateY(-2px) rotate(45deg)!important' not in appearance
+    assert 'transform:translateY(2px) rotate(-135deg)!important' not in appearance
+    assert 'data-signal-date' in app
+    assert 'data-history-date' in app
+    assert 'data-calendar-date-group' in app
+
+
+def test_dashboard_pass2_tool_controls_are_semantic_buttons():
+    html=(ROOT / "dashboard.html").read_text(encoding="utf-8")
+    assert "<button class=\"collapse-control\" type=\"button\"" in html
+    assert "aria-expanded=\"false\"" in html
+
+
+def test_all_date_group_collapse_controls_receive_open_state_class():
+    app=(ROOT / "app.js").read_text(encoding="utf-8")
+    live=(ROOT / "dashboard-live-wiring.js").read_text(encoding="utf-8")
+    marker='<i aria-hidden="true" class="collapse-control ${open?"is-open":""}"></i>'
+    assert app.count(marker) == 3
+    assert live.count(marker) == 1
+
+
+def test_dashboard_has_one_expandable_control_geometry():
+    foundation = (ROOT / "foundation.css").read_text(encoding="utf-8")
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+    appearance = (ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
+
+    # One source of truth for the size and radius of every expandable control.
+    assert '--ui-collapse-size:32px' in foundation
+    assert '--ui-collapse-radius:10px' in foundation
+    assert 'border-radius:var(--ui-collapse-radius)!important' in foundation
+    assert '--ui-control-h:var(--ui-collapse-size)' in appearance
+    assert '--ui-control-r:var(--ui-collapse-radius)' in appearance
+
+    # No layer may re-declare a competing control size or radius.
+    assert 'width:26px;height:26px' not in styles
+    assert 'width:30px!important' not in appearance
+    assert 'border-radius:11px' not in appearance
+    assert '.topbar .icon-button{width' not in appearance
+    assert '.topbar .icon-button{width:34px' not in appearance
+
+
+def test_expandable_control_keeps_a_full_size_pointer_target():
+    foundation = (ROOT / "foundation.css").read_text(encoding="utf-8")
+    appearance = (ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
+
+    # A compact visual control must not shrink the touch target below 44px.
+    assert '--ui-collapse-tap:44px' in foundation
+    assert '.collapse-control::before' in appearance
+    assert '.topbar .icon-button::before' in appearance
+    # Sized explicitly rather than by insets: an inset box resolves against the
+    # padding box, so borders would eat into the target.
+    assert 'width:var(--ui-collapse-tap)!important' in appearance
+    assert 'height:var(--ui-collapse-tap)!important' in appearance
+    assert 'transform:translate(-50%,-50%)!important' in appearance
+
+
+def test_open_glyph_never_leaks_onto_a_nested_collapsed_control():
+    foundation = (ROOT / "foundation.css").read_text(encoding="utf-8")
+    appearance = (ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
+
+    # foundation.css opens the glyph with a DESCENDANT selector, so every chevron
+    # nested inside an expanded day group inherited the open glyph and could not
+    # rotate. The appearance layer re-asserts the closed glyph for controls that
+    # are themselves closed, with more specificity than the rule it neutralises.
+    assert '.is-open .collapse-control::after' in foundation
+    assert '.is-open .collapse-control:not(.is-open):not([aria-expanded="true"])::after' in appearance
+    assert 'transform:translateY(-2px) rotate(45deg)' in appearance
+
+
+
+def test_surfaces_share_one_corner_and_tone_contract():
+    appearance = (ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
+
+    # A card owns its corners, so a full-bleed band cannot show square corners
+    # through a rounded one.
+    for card in (
+        '#page-overview .section-block[class]',
+        '#page-signals .signals-workspace[class]',
+        '#page-history .history-workspace[class]',
+        '#page-calendar .calendar-workspace[class]',
+        '#page-tools .tool-card[class]',
+    ):
+        assert card in appearance
+    assert 'overflow:clip!important' in appearance
+
+    # A boundary must change tone: a row group already on the tinted body does
+    # not repaint that same tint.
+    assert '#page-tools .asset-category[class]' in appearance
+    assert 'background:transparent!important' in appearance
+
+
+def test_type_scale_floor_is_enforced_in_the_appearance_layer():
+    appearance = (ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
+
+    # `small` had no size of its own and inherited the browser's 1.2 ratio
+    # (9.16667px / 10.4167px), and a sub-10px tier had grown around it.
+    assert 'small{' in appearance
+    assert 'font-size:10.5px!important' in appearance
+    assert 'font-size:9.5px!important' in appearance
+    assert 'html #page-tools .asset-category-label,' in appearance
+    assert 'html #page-tools .tool-backtest .backtest-rating' in appearance
+
+
+def test_tools_section_control_follows_the_contract_above_the_mobile_gate():
+    appearance = (ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
+
+    # The Tools section geometry is authored inside max-width media queries, so a
+    # wide viewport rendered the control as a 14x4 dead box with no chevron and a
+    # body that never collapsed. The contract is re-asserted from 561px up.
+    assert "@media(min-width:561px){" in appearance
+    assert "html #page-tools .tool-collapse>.section-heading>.collapse-control{" in appearance
+    assert 'html #page-tools .tool-collapse>.section-heading>.collapse-control::after{' in appearance
+    assert 'content:""!important' in appearance
+    assert 'width:var(--ui-collapse-size)!important' in appearance
+    assert "html #page-tools .tool-collapse:not(.is-open)>.tool-body{display:none!important}" in appearance
+
+
+
+def test_accent_map_resolves_for_every_style_including_neo_emerald():
+    css = CSS
+
+    for accent in ("emerald", "indigo", "amber", "rose", "cyan"):
+        assert f'html[data-accent="{accent}"]' in css or accent == "emerald"
+        assert f'html[data-style="neo"][data-accent="{accent}"]' in css
+        assert f'html[data-theme="dark"][data-style="neo"][data-accent="{accent}"]' in css
+
+    # Text and solid fills use the accessible accent, not the vivid decorative one.
+    assert '--accent-fill:#047857' in css
+    assert '--accent-strong:#047857' in css
+    assert 'background:var(--accent-fill)' in css
+
+
+
+def test_dashboard_http_server_handles_requests_concurrently():
+    source = (ROOT / "main.py").read_text(encoding="utf-8")
+    assert "class ThreadingWSGIServer(ThreadingMixIn, WSGIServer)" in source
+    assert "daemon_threads = True" in source
+    assert "server_class=ThreadingWSGIServer" in source
