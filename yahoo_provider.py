@@ -127,6 +127,19 @@ class YahooProvider:
         return YF_TTL_BY_INTERVAL.get(interval, 60.0)
 
     @staticmethod
+    def _record_cache_event(*, hit: bool = False, miss: bool = False) -> None:
+        try:
+            from bandwidth_metrics import record as record_bandwidth
+            record_bandwidth(
+                "yahoo_cache",
+                requests=0,
+                cache_hits=int(bool(hit)),
+                cache_misses=int(bool(miss)),
+            )
+        except Exception:
+            logger.debug("Yahoo cache telemetry unavailable", exc_info=True)
+
+    @staticmethod
     def _key_id(key: tuple[str, str, str, bool]) -> str:
         return "|".join((key[0], key[1], key[2], str(int(bool(key[3])))))
 
@@ -420,6 +433,7 @@ class YahooProvider:
 
         cached = self._cached(key)
         if cached is not None:
+            self._record_cache_event(hit=True)
             self._mark_provenance(provenance, source="memory_cache", age_seconds=0.0, cache_key=self._key_id(key))
             return cached
 
@@ -428,11 +442,13 @@ class YahooProvider:
             # Another concurrent caller may have completed while we waited.
             cached = self._cached(key)
             if cached is not None:
+                self._record_cache_event(hit=True)
                 self._mark_provenance(provenance, source="memory_cache", age_seconds=0.0, cache_key=self._key_id(key))
                 return cached
 
             compatible = self._compatible_cached(key)
             if compatible is not None:
+                self._record_cache_event(hit=True)
                 self._mark_provenance(
                     provenance, source="memory_cache_compatible",
                     age_seconds=0.0, cache_key=self._key_id(key),
@@ -443,6 +459,7 @@ class YahooProvider:
             if persisted is not None:
                 frame, age = persisted
                 if age <= self._ttl(interval):
+                    self._record_cache_event(hit=True)
                     now = time.monotonic()
                     with self._lock:
                         self._cache[key] = (frame.copy(), now)
@@ -450,6 +467,7 @@ class YahooProvider:
                     self._mark_provenance(provenance, source="persisted_cache", age_seconds=round(age, 1), cache_key=self._key_id(key))
                     return frame.copy()
 
+            self._record_cache_event(miss=True)
             retry_in = self._in_backoff(symbol)
             if retry_in > 0:
                 stale = self._stale(key)
