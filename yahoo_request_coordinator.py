@@ -24,8 +24,10 @@ class YahooRequestCoordinator:
         self._in_flight = False
 
     def run(self, callback: Callable[[], T], *, priority: int = 5) -> T:
+        from bandwidth_metrics import record as record_bandwidth
+        queued_at = time.monotonic()
         ticket = (int(priority), next(self._sequence))
-        deadline = time.monotonic() + self.queue_timeout_seconds
+        deadline = queued_at + self.queue_timeout_seconds
         with self._condition:
             heapq.heappush(self._queue, ticket)
             self._condition.notify_all()
@@ -35,6 +37,7 @@ class YahooRequestCoordinator:
                     self._queue.remove(ticket)
                     heapq.heapify(self._queue)
                     self._condition.notify_all()
+                    record_bandwidth("yahoo_queue", requests=0, queue_timeouts=1)
                     raise YahooRequestQueueTimeout("Yahoo request admission queue timed out")
                 if not self._in_flight and self._queue and self._queue[0] == ticket:
                     spacing = self._next_allowed_at - now
@@ -43,6 +46,12 @@ class YahooRequestCoordinator:
                         self._in_flight = True
                         self._next_allowed_at = now + self.min_interval_seconds
                         self._condition.notify_all()
+                        record_bandwidth(
+                            "yahoo_queue",
+                            requests=0,
+                            queue_admissions=1,
+                            queue_wait_ms=int((time.monotonic() - queued_at) * 1000),
+                        )
                         break
                     self._condition.wait(timeout=min(spacing, deadline - now))
                 else:
