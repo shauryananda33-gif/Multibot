@@ -11,7 +11,7 @@ import time
 import threading
 
 from db import DatabaseManager as _SQLiteDatabaseManager
-from db import DatabaseError
+from db import DatabaseError, _RemoteRow
 
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "").strip()
 
@@ -53,6 +53,48 @@ def _translate_sql(sql: str) -> str:
     return re.sub(r"(?<!%)\?", "%s", statement)
 
 
+class _PostgresCursor:
+    """Expose sqlite-compatible rows over psycopg's tuple-based cursor."""
+
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    @property
+    def lastrowid(self):
+        return getattr(self._cursor, "lastrowid", None)
+
+    def _convert(self, row):
+        if row is None:
+            return None
+        names = [column.name for column in (self.description or ())]
+        return _RemoteRow(names, row)
+
+    def fetchone(self):
+        return self._convert(self._cursor.fetchone())
+
+    def fetchall(self):
+        return [self._convert(row) for row in (self._cursor.fetchall() or [])]
+
+    def fetchmany(self, size=None):
+        rows = self._cursor.fetchmany(size) if size is not None else self._cursor.fetchmany()
+        return [self._convert(row) for row in (rows or [])]
+
+    def __iter__(self):
+        while True:
+            row = self.fetchone()
+            if row is None:
+                break
+            yield row
+
+
 class _PostgresConnection:
     """Connection context with sqlite-like execute() and deterministic close."""
 
@@ -61,7 +103,8 @@ class _PostgresConnection:
 
     def execute(self, sql, parameters=()):
         try:
-            return self._connection.execute(_translate_sql(sql), tuple(parameters or ()))
+            cursor = self._connection.execute(_translate_sql(sql), tuple(parameters or ()))
+            return _PostgresCursor(cursor)
         except Exception as exc:
             raise DatabaseError(f"Supabase Postgres query failed: {exc}") from exc
 
@@ -135,7 +178,6 @@ class DatabaseManager(_SQLiteDatabaseManager):
             return connection
         try:
             import psycopg
-            from psycopg.rows import dict_row
             connection = psycopg.connect(
                 SUPABASE_DB_URL,
                 connect_timeout=10,
@@ -143,7 +185,6 @@ class DatabaseManager(_SQLiteDatabaseManager):
                 application_name="multibot2",
                 options="-c search_path=multibot,public",
                 prepare_threshold=None,
-                row_factory=dict_row,
             )
             return _PostgresConnection(connection)
         except Exception as exc:
