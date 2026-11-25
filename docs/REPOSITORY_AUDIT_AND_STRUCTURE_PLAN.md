@@ -477,3 +477,72 @@ These are the only external assumptions that need confirmation before the integr
 This branch contains only this planning document. No Python, JavaScript, CSS, SQL migration, Render setting, Supabase row or strategy rule has been modified.
 
 The next safe action is to review this plan and confirm the external hosting/authentication assumptions. After that, the repository changes can be prepared as one dependency-aware PR and reviewed before any merge or deployment.
+
+
+## 12. Additional call-path findings from the final pass
+
+The following items were confirmed after tracing the worker and API call paths. They are added here so the implementation checklist does not miss interactions between threads and endpoints.
+
+### Scan-cycle overlap and Telegram command replay
+
+- `run_all_cycles()` is called by the scheduled scanner and by the Telegram `/scan` command. The command handler starts a new thread for each update. There is no cycle-wide lock around the full scan cycle. The strategy service's dispatch lock protects only its dispatch/account section; it does not serialize all scans.
+- Yahoo per-symbol locks and cache reduce duplicate network calls, but they do not make concurrent full cycles safe or prevent duplicate database work and conflicting scan-status updates.
+- The Telegram update offset is local to `telegram_commands()` and starts at zero after process restart. If a process exits before the next polling request confirms an update, Telegram may return that unconfirmed command again.
+- Required treatment: add one runtime scan-cycle admission lock for scheduled and manual scans, and persist or otherwise make command-update processing idempotent. Preserve the user's ability to issue manual commands.
+
+### API data-fetch and health boundaries
+
+- `/api/backtest` and `/api/diagnostics/sweep` fetch through `SERVICE.engine.fetch` directly and do not invoke the service runtime guard. `/api/calendar` can also trigger a cache-miss fetch through the process-local calendar service.
+- A standby process is still an HTTP server. These endpoints can therefore initiate external requests outside the leader's worker ownership and outside another process's Yahoo coordinator.
+- `/api/health` reports liveness/keepalive information; it does not prove that Supabase is reachable or that the runtime leader is active. The dashboard payload currently labels the database `TURSO` when the Supabase adapter's compatibility alias is true.
+- Required treatment: distinguish liveness, readiness and leader status; gate upstream data-fetch work; correct the database label. Do not make a health probe perform a Yahoo request.
+
+### Scan result accounting and backtest display
+
+- The scan result error count includes `MARKET_DATA_ERROR` and `TELEGRAM_FAILED`, but not `SENT_PERSISTENCE_FAILED`. A Telegram-delivered signal whose trade/account persistence failed can therefore be shown as a clean scan.
+- `_backtest_payload()` calculates the displayed `planned_risk` as number of trades multiplied by the global `RISK_PER_TRADE_INR`, even though the backtest simulator receives the routed account and uses account-specific risk settings. The displayed figure can disagree with the actual account-specific simulation.
+- Required treatment: use a typed scan-result classification and source the displayed planned risk from the same account risk calculation used by the simulator.
+
+### Strategy metadata and docs contract
+
+- The README's built-in strategy table and architecture drawing show Trend Pulse and Sweep, omitting the shipped Engulfing 66 SMA strategy.
+- The README's plugin layout asks for `manifest.yaml`, while the current loader discovers Python packages exposing `create_strategy()` and reads the Python `StrategyManifest` contract. No YAML manifest loader was found.
+- Strategy manifests expose parameter metadata, including editable flags, but the live engine calls strategy validation with default configuration and the operator settings document does not provide a strategy-parameter persistence path. Do not imply those parameters are runtime-editable until that path exists.
+- The README and architecture material also describe trailing policy as a supported strategy feature, while the live monitor/backtest discrepancy is recorded above.
+- Required treatment: make README, strategy guide, manifest contract and runtime capability metadata agree with actual behaviour.
+
+### Schema and database documentation mismatch
+
+- Both schema snapshot files begin by saying runtime schema is initialized by db.py and uses Turso/libSQL. This is no longer the production architecture.
+- The root and Supabase schema snapshots are not identical. The test named `test_schema_parity.py` does not compare those files; it asserts the legacy db.py table list and Turso/SQLite implementation.
+- A comment in `supabase/schema.sql` says that this test enforces the two schema files being identical, which it does not.
+- Required treatment: make versioned migrations the sole production schema source, replace the misleading parity test with migration validation, and archive both snapshots if no external consumer depends on them.
+
+### Intentional behaviour that must not be “optimised” away
+
+- `sw.js` intentionally caches nothing because cached trading state can misrepresent current signals, trades and P&L.
+- `dashboard-live-wiring.js` intentionally consumes the single snapshot fetched by app.js; it must not add another dashboard polling loop.
+- `NewsService.get(force=True)` currently does not bypass the weekly cache. The refresh command is cache-first rather than an instruction to fetch Forex Factory immediately. This is consistent with reducing external requests; change only if an explicit force-refresh feature is wanted.
+- The three CSS files form a deliberate cascade. Repeated selectors are not proof of dead CSS because many are responsive/state overrides. Consolidate only after ownership and visual regression checks.
+- CSS/JS delivery through the external static host must be distinguished from Render API egress. Do not count frontend asset bytes as Render bandwidth until the live hosting path is confirmed.
+
+## 13. Test and CI coverage gaps
+
+The current CI workflow performs Python 3.12 setup, installs from pyproject extras, compiles Python, imports main and supabase_db, then runs pytest. It does not currently execute a live Postgres migration/integration suite, a type checker, a linter, a Render Blueprint validation or a real browser appearance run.
+
+Specific missing or misleading coverage:
+- There is no dedicated TradeMonitor test module covering transaction failure, repeated settlement or concurrent account mutation.
+- There is no dedicated NewsGate test module for the current asset-market currency mappings.
+- CalendarStore tests exercise the old local/Turso-style adapter; there is no production Supabase CalendarStore test.
+- The strategy scheduler tests cover elapsed intervals, not actual wall-clock candle-close alignment.
+- The Yahoo tests cover raised rate-limit exceptions and generic empty responses separately, but not yfinance's logged rate-limit diagnostic with an empty result.
+- The Supabase migration test checks migration text/expected statements; it does not execute the migrations against a disposable Postgres database.
+- The Supabase pool test covers basic pool return/commit, but not the inherited explicit-commit followed by context-exit double-commit path or rollback failure.
+- The asset test named as receiving signals verifies configuration/account resolution; it does not add an asset after the registry is loaded and exercise the complete live scan/dispatch path.
+- The schema-parity and dashboard-wiring tests assert legacy Turso implementation details, so they are not reliable production-Supabase architecture tests.
+
+## 14. Clarification to the file inventory
+
+The two schema snapshots are historical public-schema SQL, not the current private `multibot` schema created by the migrations. Their comments are stale. The test named schema parity is also stale and does not validate migration parity. These files should not be used as a basis for any new production migration.
+
+The frontend asset-size figures in this plan are repository sizes, not measured Render egress. The current external-host routing must be verified before using those figures in a Render bandwidth budget.
