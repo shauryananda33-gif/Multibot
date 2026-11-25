@@ -93,6 +93,7 @@ class _PostgresCursor:
                 record_bandwidth(
                     "supabase_postgres",
                     estimated_inbound_bytes=sum(_estimated_row_bytes(row) for row in rows),
+                    requests=0,
                 )
             except Exception:
                 pass
@@ -168,11 +169,19 @@ class _PostgresConnection:
             cursor = self._connection.cursor()
             cursor.executemany(translated, seq_of_parameters)
             try:
-                # Do not consume/materialize the caller's iterable just to measure it.
+                # Count parameters only for reusable sequences; never consume a generator.
+                batch_size = len(seq_of_parameters) if isinstance(seq_of_parameters, (list, tuple)) else 1
+                outbound = len(translated.encode("utf-8", errors="replace"))
+                if isinstance(seq_of_parameters, (list, tuple)):
+                    outbound += sum(
+                        _estimated_value_bytes(value)
+                        for params in seq_of_parameters
+                        for value in (params or ())
+                    )
                 record_bandwidth(
                     "supabase_postgres",
-                    outbound_bytes=len(translated.encode("utf-8", errors="replace")),
-                    requests=1,
+                    outbound_bytes=outbound,
+                    requests=batch_size,
                 )
             except Exception:
                 pass
