@@ -18,6 +18,7 @@ def test_bandwidth_metrics_tracks_components_without_mutating_snapshot():
 
     current["requests"] = 999
     assert bandwidth_metrics.snapshot()["unit_test"]["requests"] == 2
+    assert bandwidth_metrics.flush(force=True) is True
 
 
 def test_bandwidth_metrics_flush_is_safe_when_empty():
