@@ -173,3 +173,15 @@ def test_compatible_memory_cache_never_crosses_symbols_or_intervals(monkeypatch)
     provider.fetch("RELIANCE.NS", period="1d", interval="30m", validate_hourly=False)
 
     assert calls == [("SBIN.NS", "1h"), ("RELIANCE.NS", "30m")]
+
+
+def test_local_queue_timeout_does_not_trigger_symbol_backoff(monkeypatch):
+    def fail_admission(*args, **kwargs):
+        from yahoo_request_coordinator import YahooRequestQueueTimeout
+        raise YahooRequestQueueTimeout("local queue timeout")
+
+    monkeypatch.setattr(yahoo_provider.GLOBAL_YAHOO_COORDINATOR, "run", fail_admission)
+    provider = yahoo_provider.YahooProvider()
+    with pytest.raises(yahoo_provider.YahooDataError, match="not admitted"):
+        provider.fetch("GC=F", period="5d", interval="1h")
+    assert not provider.in_backoff("GC=F")

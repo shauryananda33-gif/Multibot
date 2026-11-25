@@ -8,6 +8,11 @@ import time
 from typing import Callable, TypeVar
 T = TypeVar("T")
 
+
+class YahooRequestQueueTimeout(TimeoutError):
+    """Raised when a request expires before it is admitted to Yahoo."""
+
+
 class YahooRequestCoordinator:
     def __init__(self, *, min_interval_seconds: float = 1.0, queue_timeout_seconds: float = 45.0):
         self.min_interval_seconds = max(0.0, float(min_interval_seconds))
@@ -30,7 +35,7 @@ class YahooRequestCoordinator:
                     self._queue.remove(ticket)
                     heapq.heapify(self._queue)
                     self._condition.notify_all()
-                    raise TimeoutError("Yahoo request admission queue timed out")
+                    raise YahooRequestQueueTimeout("Yahoo request admission queue timed out")
                 if not self._in_flight and self._queue and self._queue[0] == ticket:
                     spacing = self._next_allowed_at - now
                     if spacing <= 0:

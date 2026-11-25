@@ -23,7 +23,7 @@ except ImportError:
 
 from candles import validate_hourly_observations
 from config import IST_TIMEZONE
-from yahoo_request_coordinator import GLOBAL_YAHOO_COORDINATOR
+from yahoo_request_coordinator import GLOBAL_YAHOO_COORDINATOR, YahooRequestQueueTimeout
 
 YF_TTL_BY_INTERVAL = {"1m": 45.0, "30m": 120.0, "1h": 300.0, "4h": 300.0, "1d": 600.0}
 YAHOO_BACKOFF_SECONDS = 120.0
@@ -387,6 +387,14 @@ class YahooProvider:
                         priority=priority,
                     )
             except Exception as exc:
+                if isinstance(exc, YahooRequestQueueTimeout):
+                    stale = self._stale(key)
+                    if stale is not None:
+                        self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
+                        return stale
+                    raise YahooDataError(
+                        f"Yahoo request was not admitted before queue timeout for {symbol}"
+                    ) from exc
                 record_bandwidth("yahoo_finance", requests=1)
                 message = str(exc)
                 rate_limited = (
