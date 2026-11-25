@@ -211,11 +211,16 @@ def scanner_loop():
             run_all_cycles(send=True)
             if SERVICE is not None: SERVICE.notifier.retry_failed()
         except Exception: logger.exception("Strategy scan cycle failed")
-        # Never sleep longer than the fastest registered strategy schedule.
-        interval=settings.scan_interval_seconds
+        # Sleep until the next configured candle event instead of polling the
+        # full strategy universe every minute. The scheduler retains overdue
+        # events, so a slow scan cannot silently skip a completed-candle run.
+        interval=60.0
         if REGISTRY is not None:
-            try: interval=min(interval,*[SCHEDULER.interval_seconds(st) for st in REGISTRY.all()])
-            except Exception: logger.exception("Could not resolve strategy scan interval")
+            try:
+                current=now()
+                delays=[SCHEDULER.seconds_until_next_due(st,current) for st in REGISTRY.all()]
+                interval=max(1.0,min(delays)) if delays else interval
+            except Exception: logger.exception("Could not resolve next strategy scan time")
         STOP.wait(interval)
 def monitor_once():
     _require_runtime_leader()
