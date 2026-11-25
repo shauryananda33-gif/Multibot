@@ -21,6 +21,11 @@ _totals = defaultdict(lambda: {
     "outbound_bytes": 0,
     "inbound_bytes": 0,
     "estimated_inbound_bytes": 0,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "queue_admissions": 0,
+    "queue_timeouts": 0,
+    "queue_wait_ms": 0,
 })
 _window_started = time.monotonic()
 
@@ -32,6 +37,11 @@ def record(
     inbound_bytes: int = 0,
     estimated_inbound_bytes: int = 0,
     requests: int = 1,
+    cache_hits: int = 0,
+    cache_misses: int = 0,
+    queue_admissions: int = 0,
+    queue_timeouts: int = 0,
+    queue_wait_ms: int = 0,
 ) -> None:
     """Record bytes observed at an adapter boundary; never raises to callers."""
     global _window_started
@@ -41,6 +51,11 @@ def record(
             "outbound_bytes": max(0, int(outbound_bytes)),
             "inbound_bytes": max(0, int(inbound_bytes)),
             "estimated_inbound_bytes": max(0, int(estimated_inbound_bytes)),
+            "cache_hits": max(0, int(cache_hits)),
+            "cache_misses": max(0, int(cache_misses)),
+            "queue_admissions": max(0, int(queue_admissions)),
+            "queue_timeouts": max(0, int(queue_timeouts)),
+            "queue_wait_ms": max(0, int(queue_wait_ms)),
         }
         with _lock:
             bucket = _totals[str(component)]
@@ -86,15 +101,22 @@ def flush(*, force: bool = False) -> bool:
 def _log_snapshot(data: dict, elapsed: float) -> None:
     totals = {
         key: sum(item[key] for item in data.values())
-        for key in ("requests", "outbound_bytes", "inbound_bytes", "estimated_inbound_bytes")
+        for key in ("requests", "outbound_bytes", "inbound_bytes", "estimated_inbound_bytes",
+                    "cache_hits", "cache_misses", "queue_admissions", "queue_timeouts", "queue_wait_ms")
     }
     logger.info(
         "Bandwidth usage window | duration_seconds=%d requests=%d outbound_bytes=%d "
-        "inbound_bytes_observed=%d inbound_bytes_estimated=%d components=%s",
+        "inbound_bytes_observed=%d inbound_bytes_estimated=%d cache_hits=%d cache_misses=%d "
+        "queue_admissions=%d queue_timeouts=%d queue_wait_ms=%d components=%s",
         int(elapsed),
         totals["requests"],
         totals["outbound_bytes"],
         totals["inbound_bytes"],
         totals["estimated_inbound_bytes"],
+        totals["cache_hits"],
+        totals["cache_misses"],
+        totals["queue_admissions"],
+        totals["queue_timeouts"],
+        totals["queue_wait_ms"],
         data,
     )
