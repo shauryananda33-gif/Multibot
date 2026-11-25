@@ -303,6 +303,10 @@ class YahooProvider:
                     f"Yahoo Finance is in rate-limit backoff for {symbol}; retry_in={int(retry_in)}s"
                 )
 
+            # yfinance returns parsed DataFrames, not raw response bodies.
+            # Count the request and report parsed-frame size as an estimate only.
+            from bandwidth_metrics import record as record_bandwidth
+            record_bandwidth("yahoo_finance", requests=1)
             try:
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
