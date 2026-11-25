@@ -123,7 +123,7 @@ class StrategyScheduler:
             self._last[key] = current
             return True
         if is_canonical:
-            due_events = list(_canonical_events(last, current))
+            due_events = sorted(_canonical_events(last, current))
             if not due_events:
                 return False
             self._last[key] = due_events[-1]
@@ -152,10 +152,10 @@ class StrategyScheduler:
         if is_canonical:
             # If a configured event elapsed while the previous scan was
             # running, return immediately so is_due() can consume it.
-            overdue = list(_canonical_events(last, current))
+            overdue = sorted(_canonical_events(last, current))
             if overdue:
                 return 0.0
             horizon = current + pd.Timedelta(days=8)
-            next_events = list(_canonical_events(current, horizon))
+            next_events = sorted(_canonical_events(current, horizon))
             return max(0.0, (next_events[0] - current).total_seconds()) if next_events else 3600.0
         return max(0.0, self.interval_seconds(strategy) - (current - last).total_seconds())
