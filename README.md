@@ -2,7 +2,7 @@
 
 > ### 🧠 A modular, plug-and-play algorithmic **paper-trading engine**
 >
-> **Yahoo Finance · Multi-Strategy · Risk Controlled · Telegram · Turso · Dashboard · Strategy Lab**
+> **Yahoo Finance · Multi-Strategy · Risk Controlled · Telegram · Supabase Postgres · Dashboard · Strategy Lab**
 
 [![Version](https://img.shields.io/badge/version-3.5.0-111827?style=for-the-badge)](.)
 [![Mode](https://img.shields.io/badge/mode-PAPER-16a34a?style=for-the-badge)](.)
@@ -80,7 +80,7 @@ Material 3 is presentation-only. It does not introduce a second DOM, component f
                     │ dashboard             │
                     └──────────┬───────────┘
                                ▼
-                     🗄️ Turso / SQLite
+                     🗄️ Supabase Postgres / SQLite
 ```
 
 ---
@@ -155,7 +155,7 @@ Strategies are identified by stable IDs such as `adaptive_trend` and `sweep_v2`,
 | ⏳ Signal freshness | exactly 1 hour |
 | 🔁 Maximum sends / identity | 2 |
 | 🌏 Timezone | Asia/Kolkata |
-| 🗄️ Durable primary | Turso / libSQL |
+| 🗄️ Durable primary | Supabase Postgres |
 | 💻 Local development | SQLite (one-time legacy import supported) |
 
 ### Account limits
@@ -196,7 +196,7 @@ Every strategy follows the same safety path:
       ↓
 📐 TradePlan
       ↓
-💾 Turso / SQLite
+💾 Supabase Postgres / SQLite
       ↓
 💬 Telegram
       ↓
@@ -363,8 +363,8 @@ The bot also provides operational commands such as `/start`, `/check`, `/balance
 MULTIBOT2 uses:
 
 ```text
-Turso/libSQL → durable runtime primary (all deployed reads and writes)
-SQLite       → local development and one-time import of existing state
+Supabase Postgres → durable runtime primary (all deployed reads and writes)
+SQLite            → local development and tests
 ```
 
 Signal send history is persisted so duplicate protection can survive process restarts.
@@ -385,7 +385,8 @@ MULTIBOT2/
 ├── market_data.py              # canonical market data helpers
 ├── candles.py                  # candle normalization/building
 ├── yahoo_provider.py            # Yahoo-only provider
-├── db.py                        # Turso/libSQL + local SQLite persistence
+├── db.py                        # local SQLite persistence primitives
+├── supabase_db.py               # Supabase Postgres production adapter
 ├── telegram.py                  # Telegram adapter
 ├── dashboard.py                 # dashboard backend payloads
 ├── sweep_engine.py              # Sweep 4H calculations
@@ -410,14 +411,14 @@ MULTIBOT2/
 
 ## 🚀 Run
 
-Every deployment uses one canonical entrypoint: `main.py`. The runtime acquires a Turso-backed leader lease before starting scanners, trade monitoring, summaries, reminders or Telegram polling. Overlapping deployment instances can serve the dashboard, but only the lease holder runs trading workers.
+Every deployment uses one canonical entrypoint: `main.py`. The runtime acquires a Supabase Postgres-backed leader lease before starting scanners, trade monitoring, summaries, reminders or Telegram polling. Overlapping deployment instances can serve the dashboard, but only the lease holder runs trading workers.
 
 ```bash
 pip install -e ".[test]"
-python main.py
+./.venv/bin/python main.py
 ```
 
-AIC Cloud is the sole deployment target and executes the canonical entrypoint:
+Render executes the canonical entrypoint:
 
 ```text
 ./.venv/bin/python main.py
@@ -475,3 +476,8 @@ For strategy-only work, give it:
 ```
 
 **MULTIBOT2 v3.5.0 — modular paper trading with canonical market data, Material 3 presentation and a single release source.** 🚀
+
+
+## Supabase database deployment
+
+See docs/SUPABASE_DATABASE.md for SUPABASE_DB_URL, session-pooler setup, the private schema migration, and the local development workflow.

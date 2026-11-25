@@ -883,13 +883,15 @@ sweep_engine.py
 
 # --- persistence -----------------------------------------------------------
 db.py
-    Turso/libSQL persistence, atomic runtime-leader lease and local SQLite development fallback.
+    Legacy SQLite persistence primitives used for local development and tests.
+supabase_db.py
+    Supabase Postgres production adapter, SQL compatibility layer and atomic runtime-leader lease.
 schema.sql
     Legacy Supabase schema snapshot retained for historical reference; not used by the runtime.
 supabase/schema.sql
     Older legacy Supabase schema snapshot retained for historical reference; not used by the runtime.
 
-The only live runtime schema is declared and initialized by db.py for both local SQLite and Turso.
+The local SQLite schema is declared by db.py. The deployed Supabase Postgres schema is versioned in supabase/migrations/ and accessed through supabase_db.py.
 
 # --- news and calendar -----------------------------------------------------
 news.py
@@ -952,7 +954,7 @@ tools/check_release_docs.py
     CI: Python 3.12, editable install, compileall, import discovery, pytest.
 ```
 
-25 root modules, 3 registered strategies, 7 dashboard assets. This list is
+26 root modules, 3 registered strategies, 7 dashboard assets. This list is
 enforced by tests/test_rebuild_spec_inventory.py.
 
 ---
