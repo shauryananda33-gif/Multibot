@@ -265,7 +265,16 @@ class CalendarService:
             },
         )
         with urllib.request.urlopen(req, timeout=15) as response:
-            return response.read().decode("utf-8", errors="replace")
+            raw = response.read()
+        from bandwidth_metrics import record as record_bandwidth
+        record_bandwidth(
+            "forex_factory",
+            outbound_bytes=len(req.data or b"") + sum(
+                len(k.encode()) + len(v.encode()) for k, v in req.header_items()
+            ),
+            inbound_bytes=len(raw),
+        )
+        return raw.decode("utf-8", errors="replace")
 
     def _fetch_week(self, feed_key: str, week_start: date) -> tuple[list[dict], str]:
         errors: list[str] = []
