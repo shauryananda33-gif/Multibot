@@ -689,7 +689,7 @@ def _dashboard_json_response(env,start,payload):
     supplied={value.strip() for value in str(env.get("HTTP_IF_NONE_MATCH","")).split(",") if value.strip()}
     headers=[("Cache-Control","no-store"),("ETag",etag)]
     if etag in supplied or "*" in supplied:
-        start("304 Not Modified",headers+[("Content-Length","0")])
+        start("304 Not Modified",headers)
         return []
     start("200 OK",[("Content-Type","application/json; charset=utf-8")]+headers+[("Content-Length",str(len(body)))])
     return [body]
