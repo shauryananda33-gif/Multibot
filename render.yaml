@@ -6,7 +6,7 @@ services:
     branch: main
     autoDeploy: true
     buildCommand: pip install -e .
-    startCommand: python startup.py && python main.py
+    startCommand: python main.py
     healthCheckPath: /ping
     envVars:
       - key: PYTHON_VERSION
@@ -18,6 +18,8 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: SUPABASE_DB_URL
         sync: false
       - key: SUPABASE_URL
         sync: false
