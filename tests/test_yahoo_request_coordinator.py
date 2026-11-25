@@ -46,3 +46,13 @@ def test_queue_timeout_removes_ticket_and_recovers():
     worker.join(2)
     assert not worker.is_alive()
     assert coordinator.run(lambda: "recovered") == "recovered"
+
+
+
+def test_coordinator_records_admission_metrics():
+    import bandwidth_metrics
+    coordinator = YahooRequestCoordinator(min_interval_seconds=0, queue_timeout_seconds=1)
+    before = bandwidth_metrics.snapshot().get("yahoo_queue", {}).get("queue_admissions", 0)
+    assert coordinator.run(lambda: "ok") == "ok"
+    after = bandwidth_metrics.snapshot()["yahoo_queue"]["queue_admissions"]
+    assert after == before + 1
