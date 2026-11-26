@@ -26,17 +26,15 @@ configuration:
 - `SUPABASE_DB_URL`: Supabase PostgreSQL session-pooler connection string
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
-- `DASHBOARD_API_TOKEN`: a long, randomly generated secret known only to the
-  operator
+- `DASHBOARD_API_TOKEN`: a long, randomly generated secret used only for
+  configuration-changing POST requests. It is not required to open or view the
+  public dashboard.
 
-The dashboard asks for the admin token when a protected API returns
-`ADMIN_TOKEN_REQUIRED`. The browser stores the token locally for subsequent
-requests. Do not put the token in source control, build logs, or public
-documentation.
+The dashboard and its read-only data APIs are public to anyone with the URL.
+Settings and notification-channel changes still require the admin token.
+Do not put the token in source control, build logs, or public documentation.
 
-Production requests fail closed when `DASHBOARD_API_TOKEN` is missing. Local
-development without a deployment `PORT` retains the existing tokenless
-workflow. The public `/ping` and `/api/health` endpoints remain available.
+The public `/ping` and `/api/health` endpoints remain available.
 
 Render supplies `PORT`; do not hard-code it in the Blueprint. The existing
 cron-job.org keepalive should call
