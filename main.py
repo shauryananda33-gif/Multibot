@@ -26,7 +26,7 @@ from yahoo_provider import YahooProvider
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger=logging.getLogger("multibot2")
 warnings.filterwarnings("ignore", message="The .*generic.* unit for NumPy timedelta is deprecated.*", category=DeprecationWarning, module="yfinance\\..*")
-DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if DB.turso_enabled else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); NEWS_PAUSE_ENABLED=False
+DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if DB.turso_enabled else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); CYCLE_LOCK=threading.Lock(); NEWS_PAUSE_ENABLED=False
 REGISTRY=None; SERVICE=None; TRADE_MONITOR=None; SCHEDULER=StrategyScheduler(); NEWS_GATE=NewsGate(NEWS, enabled=NEWS_PAUSE_ENABLED)
 LAST_SCANS={}
 LAST_PING_AT=None
@@ -169,7 +169,7 @@ def run_strategy_cycle(strategy_id,*,now_at=None,send=True,period="30d"):
             logger.exception("Failed to persist FAILED scan history | strategy=%s run_id=%s",strategy_id,run_id)
         with LOCK: LAST_SCANS[strategy_id].update(status="ERROR",at=current.isoformat(),**payload)
         raise
-    payload={"checked":len(results),"directional":sum(r.signal.is_directional for r in results),"sent":sum(r.sent for r in results),"errors":sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason=="TELEGRAM_FAILED" for r in results)}
+    payload={"checked":len(results),"directional":sum(r.signal.is_directional for r in results),"sent":sum(r.sent for r in results),"errors":sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason in {"TELEGRAM_FAILED","SENT_PERSISTENCE_FAILED","SENT_ACCOUNT_LIMIT_RACE"} for r in results)}
     payload["buy"]=sum(r.signal.direction=="BUY" for r in results); payload["sell"]=sum(r.signal.direction=="SELL" for r in results); payload["no_signal"]=sum(not r.signal.is_directional for r in results)
     status="PARTIAL" if payload["errors"] else "OK"
     reasons={reason:sum(r.reason==reason for r in results) for reason in sorted({r.reason for r in results})}
@@ -191,7 +191,7 @@ def run_strategy_cycle(strategy_id,*,now_at=None,send=True,period="30d"):
             checked=len(results),
             directional=sum(r.signal.is_directional for r in results),
             sent=sum(r.sent for r in results),
-            errors=sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason=="TELEGRAM_FAILED" for r in results),
+            errors=sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason in {"TELEGRAM_FAILED","SENT_PERSISTENCE_FAILED","SENT_ACCOUNT_LIMIT_RACE"} for r in results),
             reasons={reason:sum(r.reason==reason for r in results) for reason in sorted({r.reason for r in results})},
             elapsed_ms=round((time.monotonic()-started)*1000),
         )
@@ -199,12 +199,17 @@ def run_strategy_cycle(strategy_id,*,now_at=None,send=True,period="30d"):
     return results
 def run_all_cycles(*,now_at=None,send=True,period="30d",force=False):
     _require_runtime_leader()
-    ensure_runtime(); out=[]
-    current=now_at or now()
-    for st in REGISTRY.all():
-        if force or SCHEDULER.is_due(st,current):
-            out.extend(run_strategy_cycle(st.manifest.id,now_at=current,send=send,period=period))
-    return out
+    ensure_runtime()
+    # Scheduled scans and Telegram /scan requests share one cycle lock. A
+    # manual request waits for the current cycle instead of racing account,
+    # signal and provider state in another thread.
+    with CYCLE_LOCK:
+        out=[]
+        current=now_at or now()
+        for st in REGISTRY.all():
+            if force or SCHEDULER.is_due(st,current):
+                out.extend(run_strategy_cycle(st.manifest.id,now_at=current,send=send,period=period))
+        return out
 def scanner_loop():
     while not STOP.is_set():
         try:
@@ -237,6 +242,7 @@ def monitor_loop():
         except Exception: logger.exception("Monitor cycle failed")
         STOP.wait(settings.monitor_interval_seconds)
 def _backtest_payload(strategy,symbol,period):
+    _require_runtime_leader()
     ensure_runtime(); key=strategy.strip().lower(); st=REGISTRY.get(key); symbol=symbol.strip().upper()
     if symbol not in st.manifest.assets: raise ValueError(f"{key} does not support {symbol}")
     frame=SERVICE.engine.fetch(st,symbol,period=period)
@@ -771,6 +777,7 @@ def _notifications_response(env,start):
     return _json_response(start,{"ok":True,"message":message,**channels.state()})
 def _sweep_diagnostic_payload(*, period="30d"):
     """Run the real Sweep V2 data -> prepare -> signal path without dispatching or sending."""
+    _require_runtime_leader()
     ensure_runtime()
     strategy = REGISTRY.get("sweep_v2")
     current = now()
@@ -813,6 +820,7 @@ def _sweep_diagnostic_payload(*, period="30d"):
             "version": strategy.manifest.version}, "generated_at": current.isoformat(),
             "period": period, "totals": totals, "assets": rows}
 def _calendar_payload(query):
+    _require_runtime_leader()
     target=query.get("date",[None])[0]; impacts={x.strip().title() for x in query.get("impact",["All"])[0].split(",") if x.strip()} or {"All"}; return NEWS.get(target_date=target,impacts={"All"} if "All" in impacts else impacts,force=query.get("refresh")==["1"])
 def _hostname(value, *, authority=False):
     """Lowercased hostname from an Origin/Referer URL or a Host-style authority."""
@@ -910,6 +918,8 @@ def build_app():
             guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             try:return _json_response(start,_sweep_diagnostic_payload(period=query.get("period",["30d"])[0]))
+            except RuntimeLeadershipError as exc:
+                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
             except Exception as exc:
                 logger.exception("Sweep diagnostics failed")
                 return _json_response(start,{"ok":False,"error_type":type(exc).__name__,"error":str(exc)},"500 Internal Server Error")
@@ -933,6 +943,7 @@ def build_app():
             guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             try:return _json_response(start,_calendar_payload(query))
+            except RuntimeLeadershipError as exc:return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
             except Exception as exc:return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request")
         if path=="/api/backtest":
             guard=_admin_api_guard(env,start)
@@ -945,6 +956,8 @@ def build_app():
                     query.get("symbol",[LIVE_SYMBOLS[0]])[0],
                     query.get("period",["30d"])[0],
                 ))
+            except RuntimeLeadershipError as exc:
+                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
             except Exception as exc:
                 logger.exception("Backtest request failed")
                 return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request")
