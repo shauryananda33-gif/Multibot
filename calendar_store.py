@@ -20,9 +20,10 @@ DEFAULT_PATH = os.getenv("BOT_STATE_DB_PATH", "/tmp/workspace/multibot2_state.db
 class CalendarStore:
     def __init__(self, path: str | None = None, *, database=None) -> None:
         self.path = path or DEFAULT_PATH
-        os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
         # Runtime injects its configured adapter (Supabase in Render); local
         # construction retains SQLite/Turso compatibility for tests and tools.
+        if database is None:
+            os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
         self.database = database or DatabaseManager(self.path)
         def initialize():
             with self.database._connect() as conn:
