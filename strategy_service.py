@@ -26,10 +26,10 @@ class DispatchResult:
     sent:bool; reason:str; account:str; trade_id:str|None=None; signal_id:str|None=None
 
 class StrategyService:
-    def __init__(self,*,registry,provider=None,database=None,accounts=None,telegram_config=None,notifier=None,news_gate=None,runtime_guard=None):
+    def __init__(self,*,registry,provider=None,database=None,accounts=None,account_lock=None,telegram_config=None,notifier=None,news_gate=None,runtime_guard=None):
         self.registry=registry; self.engine=StrategyEngine(provider); self.database=database or DatabaseManager(); self.runtime_guard=runtime_guard
         self.gate=SignalGate(); self.news_gate=news_gate; self.telegram_config=telegram_config; self.notifier=notifier or NotificationService(self.database,telegram_config)
-        self._lock=RLock()
+        self._lock=account_lock or RLock()
         if accounts is not None:self.accounts=accounts
         else:
             today=pd.Timestamp.now(tz="Asia/Kolkata").date().isoformat(); rows=self.database.load_accounts(account_names(),ACCOUNT_SIZES,today)
