@@ -1,4 +1,4 @@
-"""Guard the single database schema used by local SQLite and remote Turso."""
+"""Guard the shared SQLite-compatible schema used by local SQLite and Supabase Postgres."""
 from pathlib import Path
 import re
 
@@ -41,7 +41,7 @@ def test_runtime_has_no_supabase_rest_dependency():
     assert "_supabase_request" not in source
 
 
-def test_turso_uses_the_same_sqlite_compatible_database_layer():
+def test_legacy_turso_compatibility_is_kept_separate_from_production_supabase():
     source = DB_MODULE.read_text(encoding="utf-8")
     assert "import libsql" in source
     assert "libsql.connect(TURSO_DATABASE_URL,auth_token=TURSO_AUTH_TOKEN)" in source

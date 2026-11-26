@@ -146,26 +146,31 @@ server's `actionable` flag.
 
 ## 5. Persistence
 
-**Turso/libSQL is the runtime primary store when configured.** Every runtime
-read and write uses the same SQLite-compatible SQL schema against the remote
-Turso database. This makes accounts, trades, signal identities, delivery
-history, scan history, scan-error deduplication, market-data cache and the
-economic-calendar cache survive app restarts and redeployments without relying
-on the app container's local filesystem.
+**Supabase Postgres is the durable production database.** Render connects to
+the private `multibot` schema through `supabase_db.DatabaseManager` using
+`SUPABASE_DB_URL` (the Supabase session pooler, SSL required by default).
+Accounts, trades, signal events, delivery history, scan history, scan-error
+deduplication, market-data cache, calendar cache, runtime leases and Telegram
+poll progress persist across restarts and redeployments.
 
-When Turso is not configured, local SQLite remains available for development
-and tests. On the first Turso startup, an existing local SQLite state file is
-imported once using primary-key-safe inserts; the source file is never deleted.
-Existing Turso rows win on conflicts. The database connection uses the
-server-side `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` environment variables.
-The dashboard reports `TURSO` when remote persistence is active and
-`LOCAL_SQLITE` for local development.
+The authoritative production schema is the ordered, additive migration chain
+under `supabase/migrations/`. Apply new migrations to the Supabase project
+before deploying code that depends on them. The root `schema.sql` and
+`supabase/schema.sql` files are historical public-schema snapshots; do not
+apply them to production.
 
-Turso is the sole runtime remote database. Supabase REST mirroring and its
-quota-dependent writes are no longer part of the runtime. Do not remove the
-old Supabase project until any data that exists only there has been exported
-and verified in Turso. Never expose `TURSO_AUTH_TOKEN` to the browser.
+Local development uses SQLite when `SUPABASE_DB_URL` is absent and `PORT`
+is not set. A deployed Render process fails closed if the Supabase database
+connection is missing; it must never silently fall back to ephemeral local
+SQLite. `db.py` retains the SQLite-compatible persistence API and legacy
+Turso/libSQL compatibility code, but the production adapter is Supabase
+Postgres. Its legacy `turso_enabled` compatibility flag is not a reliable
+backend identity; use `supabase_enabled`.
 
+The dashboard reports `SUPABASE_POSTGRES` for production and `LOCAL_SQLITE`
+for local development. The persistence adapter connects directly to Postgres;
+Supabase REST API keys are not Postgres credentials. Never commit or expose
+`SUPABASE_DB_URL` or its password.
 
 ## 6. Market data
 
@@ -232,14 +237,14 @@ The count (3) and each name/version are asserted against the live registry by
 |---|---|
 | Bind | `0.0.0.0:$PORT`, default `10000` |
 | Health path | `/ping` |
-| Active worker owner | Atomic Turso/SQLite `runtime_leases` row; 60s lease, 15s heartbeat |
+| Active worker owner | Atomic Supabase Postgres `runtime_leases` row; 60s lease, 15s heartbeat |
 | Standby behavior | Dashboard may serve; scanner, monitor, reminders and Telegram polling remain stopped |
-| Deployment database | Shared Turso required for the lease; deployed local-SQLite fallback is refused unless explicitly overridden for a single-process test |
+| Deployment database | `SUPABASE_DB_URL` session pooler required; deployed local-SQLite fallback is refused |
 | Startup order | `main.py` only; `startup.py` is a compatibility wrapper |
-| Auth | No user login. `/api/settings` + `/api/notifications` reject cross-origin requests (403 `CROSS_ORIGIN`); when `DASHBOARD_API_TOKEN` is set, writes require it (401 `ADMIN_TOKEN_REQUIRED`, `X-Admin-Token` or `Bearer`). Reads stay open and redacted — do not expose publicly without a reverse-proxy auth layer. |
+| Auth | No user login. Protected dashboard, diagnostics, calendar, news, backtest, settings and notification APIs enforce same-origin checks and require `DASHBOARD_API_TOKEN` (401 `ADMIN_TOKEN_REQUIRED`, `X-Admin-Token` or `Bearer`). Public `/ping` and `/api/health` expose only liveness/keepalive facts. |
 | Keepalive | External cron every 10 min; `/api/health` reports `OK` ≤ 15 min, else `STALE` |
 | Python | `>=3.11`; CI uses 3.12 |
-| Dependencies | `pandas>=2.2,<3`, `yfinance>=0.2.50,<1`, `requests>=2.31,<3`, `beautifulsoup4>=4.12,<5`, `libsql==0.1.11` |
+| Dependencies | `pandas>=2.2,<3`, `yfinance>=0.2.50,<1`, `requests>=2.31,<3`, `beautifulsoup4>=4.12,<5`, `libsql==0.1.11` (legacy compatibility only; not the production database) |
 | Version | `release_notes.APP_VERSION`, mirrored to `pyproject.toml`, `MANIFEST.txt`, `README.md`, `WHATS_NEW.md` |
 
 `main.py` is the sole runtime entrypoint on AIC Cloud and Render. The process must acquire the database-backed primary lease before starting any worker that can scan, monitor or deliver. A standby process must not poll Telegram or run trading jobs. Lease renewal failure is fail-closed: stop workers and release ownership when possible. SIGTERM/SIGINT must set the shared stop event and release the lease. `startup.py` is only a compatibility wrapper and must never send an independent announcement.

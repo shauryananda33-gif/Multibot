@@ -1,8 +1,8 @@
 """Durable weekly cache for the economic calendar.
 
 The dashboard never needs to contact Forex Factory after a week has been cached.
-Turso is the durable store in deployments; local SQLite remains available for
-local development and tests.
+Supabase Postgres is the durable store in deployments; local SQLite remains
+available for local development and tests.
 """
 from __future__ import annotations
 

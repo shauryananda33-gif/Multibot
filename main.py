@@ -477,7 +477,7 @@ def _build_dashboard_payload(started):
 # Scan-level error alerts are edge-triggered and durable: an asset outage that
 # fails every sweep must not post one bubble per sweep, and a Render redeploy or
 # process restart must not forget an open incident. The incident record lives in
-# db.scan_error_alerts (Turso primary, local SQLite for development), keyed per strategy:
+# db.scan_error_alerts (Supabase Postgres primary, local SQLite for development), keyed per strategy:
 # the first scan with errors alerts; repeats with the same failing-asset set and
 # error classes stay silent (every sweep still logs full technical detail and
 # records a scan_runs row); a changed failure set alerts immediately; an
