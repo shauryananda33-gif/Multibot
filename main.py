@@ -876,9 +876,8 @@ def _admin_api_guard(env,start,*,require_token=True):
         return _json_response(start,{"ok":False,"error":"An admin token is required for this dashboard API. Send it as X-Admin-Token or Authorization: Bearer.","code":"ADMIN_TOKEN_REQUIRED"},"401 Unauthorized")
     return None
 def _config_endpoint_guard(env,start):
-    """Allow public configuration reads; require the admin token for mutations."""
-    method=env.get("REQUEST_METHOD","GET").upper()
-    return _admin_api_guard(env,start,require_token=(method=="POST"))
+    """Protect configuration reads and writes; only the main dashboard is public."""
+    return _admin_api_guard(env,start)
 def build_app():
     root=os.path.dirname(__file__); files={"/":("dashboard.html","text/html; charset=utf-8"),"/dashboard":("dashboard.html","text/html; charset=utf-8"),"/app.js":("app.js","application/javascript"),"/styles.css":("styles.css","text/css"),"/appearance.js":("appearance.js","application/javascript"),"/dashboard-live-wiring.js":("dashboard-live-wiring.js","application/javascript"),"/appearance-overrides.css":("appearance-overrides.css","text/css"),"/foundation.css":("foundation.css","text/css"),"/notifications.js":("notifications.js","application/javascript"),"/manifest.webmanifest":("manifest.webmanifest","application/manifest+json"),"/sw.js":("sw.js","application/javascript"),"/app-icon.svg":("app-icon.svg","image/svg+xml")}
     def app(env,start):
@@ -919,7 +918,7 @@ def build_app():
                 logger.exception("Dashboard API request failed | elapsed_ms=%s",round((time.monotonic()-request_started)*1000))
                 return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error")
         if path=="/api/diagnostics/sweep":
-            guard=_admin_api_guard(env,start,require_token=False)
+            guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             try:return _json_response(start,_sweep_diagnostic_payload(period=query.get("period",["30d"])[0]))
             except RuntimeLeadershipError as exc:
@@ -944,13 +943,13 @@ def build_app():
                 logger.exception("Notification channel request failed")
                 return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error")
         if path in ("/api/calendar","/api/news"):
-            guard=_admin_api_guard(env,start,require_token=False)
+            guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             try:return _json_response(start,_calendar_payload(query))
             except RuntimeLeadershipError as exc:return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
             except Exception as exc:return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request")
         if path=="/api/backtest":
-            guard=_admin_api_guard(env,start,require_token=False)
+            guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             try:
                 ensure_runtime()
