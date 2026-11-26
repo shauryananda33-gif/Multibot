@@ -1,7 +1,7 @@
 # API Contract — MULTIBOT2
 
 **Status:** authoritative. Derived from `main.py`, `dashboard.py`, `signal_lifecycle.py`
-and `db.py` at **v3.3.0**. Guarded by `tests/test_api_contract.py`.
+and `db.py` at **v3.5.0**. Guarded by `tests/test_api_contract.py`.
 
 **Why this file exists.** The server is a hand-rolled `wsgiref` application with
 routing written inline in `main.py::web_server().app()`. There is no OpenAPI
@@ -23,15 +23,7 @@ This document is the seam. A new front end may be written against this file alon
 | JSON cache header | `Cache-Control: no-store` |
 | Static cache header | `Cache-Control: no-store` |
 | Serialization | `json.dumps(payload, default=str)` — **non-serializable values are stringified, never dropped** |
-| Auth | **Configuration writes are guarded.** `/api/settings` and
-`/api/notifications` reject cross-origin requests with **403**
-`{"code":"CROSS_ORIGIN"}` (Origin/Referer vs Host, `X-Forwarded-Host`
-honoured). When `DASHBOARD_API_TOKEN` is set, every POST to those two
-endpoints must present the token as `X-Admin-Token` or
-`Authorization: Bearer` (**401** `{"code":"ADMIN_TOKEN_REQUIRED"}`);
-the dashboard prompts once and remembers it. Reads stay open with secrets
-redacted — gate reads with reverse-proxy auth before exposing publicly.
-There is no user login; all other endpoints are unauthenticated. |
+| Auth | Same-origin checks apply to protected dashboard APIs. When `DASHBOARD_API_TOKEN` is configured, `/api/dashboard`, `/api/diagnostics/sweep`, `/api/calendar`, `/api/news`, `/api/backtest`, `/api/settings` and `/api/notifications` require `X-Admin-Token` or `Authorization: Bearer` (**401** `ADMIN_TOKEN_REQUIRED`). Cross-origin protected requests receive **403** `CROSS_ORIGIN`. Public `/ping` and `/api/health` expose only liveness/keepalive facts. |
 | CORS | None. Same-origin only; the configuration endpoints enforce it server-side. |
 
 Because of `default=str`, a `pandas.Timestamp`, `Decimal` or `numpy.float64`
@@ -124,7 +116,7 @@ a well-formed body so a monitor can read the reason.
 
 ## 4. `GET /ping`
 
-The lightweight health endpoint. The AIC-hosted service can use it for uptime checks.
+The lightweight health endpoint. Render or an external uptime monitor can use it for liveness checks.
 
 - **200** `text/plain`, body `pong`, `Cache-Control: no-store`.
 - **Side effect:** updates the module-level `LAST_PING_AT`.
@@ -137,7 +129,7 @@ The lightweight health endpoint. The AIC-hosted service can use it for uptime ch
 
 ## 5. `GET /api/health`
 
-Liveness plus operational facts. Cheap; safe to poll.
+Liveness and keepalive facts only. It does not verify Supabase readiness or runtime leadership; it is cheap and safe to poll.
 
 ```jsonc
 {
@@ -714,3 +706,14 @@ Adding a field is safe. Removing or renaming one, changing a unit, flipping a
 Because the dashboard is the only consumer and the payloads are produced by
 `default=str`, a rebuild should treat every value as "possibly stringified,
 possibly null" and re-verify against a live instance before shipping.
+
+## 12. Runtime ownership and data-fetch boundaries
+
+Only the process holding the Supabase runtime lease may run scanner, monitor,
+Telegram polling, or endpoints that can fetch upstream market/calendar data.
+Standby processes return **503** from upstream-fetch routes when they are not
+the active leader.
+
+The dashboard database field is `SUPABASE_POSTGRES` in production and
+`LOCAL_SQLITE` in local development. `/api/health` is intentionally a
+liveness/keepalive endpoint, not a database-readiness probe.

@@ -409,6 +409,10 @@ def snapshot():
             _SNAPSHOT_CACHE["at"]=time.monotonic()
     return payload
 
+def _database_backend_label():
+    """Return the real production adapter, not the legacy Turso compatibility flag."""
+    return "SUPABASE_POSTGRES" if getattr(DB, "supabase_enabled", False) else "LOCAL_SQLITE"
+
 def _build_dashboard_payload(started):
     degraded=[]
     _dashboard_snapshot_stage("runtime_init",ensure_runtime)
@@ -454,7 +458,7 @@ def _build_dashboard_payload(started):
         trades=trades,
         scan={**scan,"history":scan_history},
         health={
-            "database":"TURSO" if DB.turso_enabled else "LOCAL_SQLITE",
+            "database":_database_backend_label(),
             "provider":"YAHOO",
             "telegram":"CONFIGURED" if settings.telegram_bot_token else "DISABLED",
             "telegram_failed_deliveries":len(failed_deliveries),

@@ -392,3 +392,13 @@ def test_manual_and_scheduled_scan_cycles_are_serialized(monkeypatch):
 
     assert all(not thread.is_alive() for thread in threads)
     assert state["maximum"] == 1
+
+
+def test_dashboard_reports_the_actual_supabase_database_backend(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(main, "DB", SimpleNamespace(supabase_enabled=True, turso_enabled=True))
+    assert main._database_backend_label() == "SUPABASE_POSTGRES"
+
+    monkeypatch.setattr(main, "DB", SimpleNamespace(supabase_enabled=False, turso_enabled=False))
+    assert main._database_backend_label() == "LOCAL_SQLITE"
