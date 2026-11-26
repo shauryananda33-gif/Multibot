@@ -159,13 +159,25 @@ class StrategyService:
             )
             self.database.update_signal_status(sid,"DELIVERED")
 
-            updated=register_trade(account,planned_risk=trade.planned_risk)
             trade_id=f"{account_name}_{symbol}_{int(current.timestamp()*1000)}"
             row={"id":trade_id,"status":"OPEN","signal_id":sid,"symbol":symbol,"label":asset.label,"market":asset.market,"asset_type":asset.asset_type,"group":asset.group,"timeframe":signal.timeframe,"account":account_name,"strategy":plan.strategy,"strategy_version":plan.strategy_version,"type":signal.direction,"entry":entry,"sl":sl,"tp":tp,"qty":qty,"risk_per_unit":plan.risk_per_unit,"risk_per_unit_inr":plan.risk_per_unit_inr,"fx_rate":plan.fx_rate,"currency":asset.currency,"planned_risk":trade.planned_risk,"signal_ts":signal.timestamp.isoformat(),"opened_at":current.isoformat(),"trailing_policy":plan.trailing_policy}
             try:
-                self.database.save_trade(trade_id,"OPEN",row,current.isoformat())
-                self.database.save_account(account_name,balance=updated.balance,trades_today=updated.trades_today,planned_risk_used=updated.planned_risk_used,reset_date=current.date().isoformat())
-                self.accounts[account_name]=updated
+                outcome, account_row = self.database.open_trade_and_update_account(
+                    trade_id, row, current.isoformat(), account_name=account_name,
+                    planned_risk=trade.planned_risk, reset_date=current.date().isoformat(),
+                    daily_trade_limit=account.daily_trade_limit,
+                    max_daily_planned_risk=account.max_daily_planned_risk,
+                )
+                if outcome == "LIMIT":
+                    self.database.update_signal_status(sid,"SENT_ACCOUNT_LIMIT_RACE")
+                    return self._result(symbol,signal,account_name,"SENT_ACCOUNT_LIMIT_RACE",trade=trade,message=message,sent=True,signal_id=sid)
+                if account_row is None:
+                    raise DatabaseError(f"Account {account_name!r} missing after trade reservation")
+                self.accounts[account_name]=AccountState(
+                    account_name, float(account_row["starting_balance"]),
+                    float(account_row["balance"]), float(account_row["planned_risk_used"]),
+                    int(account_row["trades_today"]),
+                )
             except Exception as exc:
                 # Delivery is already durable; never convert a sent signal into an unsent/error signal.
                 logger.exception("Post-delivery persistence failed for signal %s: %s",sid,exc)
