@@ -18,10 +18,12 @@ DEFAULT_PATH = os.getenv("BOT_STATE_DB_PATH", "/tmp/workspace/multibot2_state.db
 
 
 class CalendarStore:
-    def __init__(self, path: str | None = None) -> None:
+    def __init__(self, path: str | None = None, *, database=None) -> None:
         self.path = path or DEFAULT_PATH
         os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
-        self.database = DatabaseManager(self.path)
+        # Runtime injects its configured adapter (Supabase in Render); local
+        # construction retains SQLite/Turso compatibility for tests and tools.
+        self.database = database or DatabaseManager(self.path)
         def initialize():
             with self.database._connect() as conn:
                 conn.execute("""CREATE TABLE IF NOT EXISTS forex_calendar_week_cache (
@@ -56,7 +58,10 @@ class CalendarStore:
         except (TypeError, ValueError, AttributeError):return None, None
         def promote():
             with self.database._connect() as conn:
-                conn.execute("INSERT OR REPLACE INTO forex_calendar_week_cache(feed_key,week_start,fetched_at,events) VALUES(?,?,?,?)",(feed_key, week_start, str(fetched_at), json.dumps(events, default=str)))
+                conn.execute("""INSERT INTO forex_calendar_week_cache(feed_key,week_start,fetched_at,events)
+                    VALUES(?,?,?,?) ON CONFLICT(feed_key,week_start) DO UPDATE SET
+                    fetched_at=excluded.fetched_at, events=excluded.events""",
+                    (feed_key, week_start, str(fetched_at), json.dumps(events, default=str)))
         self.database.run_idempotent_operation(promote,operation_name="restore calendar week")
         return events, str(fetched_at)
     def save_week(self, feed_key: str, week_start: str, events: list[dict]) -> str:
@@ -64,13 +69,13 @@ class CalendarStore:
         encoded = json.dumps(events, default=str, separators=(",", ":"))
         def write_week():
             with self.database._connect() as conn:
-                conn.execute("INSERT OR REPLACE INTO forex_calendar_week_cache(feed_key,week_start,fetched_at,events) VALUES(?,?,?,?)",(feed_key, week_start, fetched_at, encoded))
+                conn.execute("""INSERT INTO forex_calendar_week_cache(feed_key,week_start,fetched_at,events)
+                    VALUES(?,?,?,?) ON CONFLICT(feed_key,week_start) DO UPDATE SET
+                    fetched_at=excluded.fetched_at, events=excluded.events""",
+                    (feed_key, week_start, fetched_at, encoded))
                 conn.execute("DELETE FROM forex_calendar_attempts WHERE feed_key=? AND week_start=?",(feed_key, week_start))
         self.database.run_idempotent_operation(write_week,operation_name="save calendar week")
-        self.database.save_market_data_cache(
-            self.cache_key(feed_key, week_start),"FOREX_FACTORY","1w",feed_key,False,
-            json.dumps({"week_start": week_start, "fetched_at": fetched_at, "events": events}, default=str),fetched_at,
-        )
+        # The versioned calendar tables are the canonical durable cache.
         return fetched_at
     def load_latest(self) -> tuple[list[dict] | None, str | None]:
         def read_latest():
@@ -105,6 +110,9 @@ class CalendarStore:
         attempted_at = datetime.now(IST).isoformat()
         def write_attempt():
             with self.database._connect() as conn:
-                conn.execute("INSERT OR REPLACE INTO forex_calendar_attempts(feed_key,week_start,attempted_at,error) VALUES(?,?,?,?)",(feed_key, week_start, attempted_at, error))
+                conn.execute("""INSERT INTO forex_calendar_attempts(feed_key,week_start,attempted_at,error)
+                    VALUES(?,?,?,?) ON CONFLICT(feed_key,week_start) DO UPDATE SET
+                    attempted_at=excluded.attempted_at, error=excluded.error""",
+                    (feed_key, week_start, attempted_at, error))
         self.database.run_idempotent_operation(write_attempt,operation_name="save calendar attempt")
         return attempted_at
