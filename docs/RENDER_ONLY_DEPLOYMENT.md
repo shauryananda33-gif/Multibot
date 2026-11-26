@@ -30,8 +30,9 @@ configuration:
   configuration-changing POST requests. It is not required to open or view the
   public dashboard.
 
-The dashboard and its read-only data APIs are public to anyone with the URL.
-Settings and notification-channel changes still require the admin token.
+The main dashboard snapshot at `/api/dashboard` is public to anyone with the URL.
+Diagnostics, backtests, settings, and notification-channel APIs remain protected
+because they expose additional configuration or can trigger expensive data work.
 Do not put the token in source control, build logs, or public documentation.
 
 The public `/ping` and `/api/health` endpoints remain available.
