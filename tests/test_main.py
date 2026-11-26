@@ -84,18 +84,21 @@ def test_configuration_reads_stay_open_without_deployment_token(monkeypatch):
     assert status == "200 OK" and payload["ok"] is True
 
 
-def test_dashboard_read_apis_are_public_but_configuration_writes_require_token(monkeypatch):
+def test_only_main_dashboard_read_api_is_public_when_admin_token_is_configured(monkeypatch):
     monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
-    # Public read-only APIs must work without any token.
-    monkeypatch.setattr(main, "_sweep_diagnostic_payload", lambda **kwargs: {"ok": True})
-    monkeypatch.setattr(main, "_calendar_payload", lambda query: {"ok": True})
-    monkeypatch.setattr(main, "_backtest_payload", lambda *args: {"ok": True})
-    for path in ("/api/dashboard", "/api/diagnostics/sweep", "/api/calendar",
-                 "/api/news", "/api/backtest", "/api/settings", "/api/notifications"):
-        status, payload = _call("GET", path)
-        assert status == "200 OK" and payload["ok"] is True, (path, status, payload)
+    # The shared dashboard snapshot is public and needs no browser token.
+    status, payload = _call("GET", "/api/dashboard")
+    assert status == "200 OK" and payload["ok"] is True
 
-    # Configuration writes remain private even though the dashboard is public.
+    # Tools, diagnostics and configuration data remain private.
+    protected = ("/api/diagnostics/sweep", "/api/calendar", "/api/news",
+                 "/api/backtest", "/api/settings", "/api/notifications")
+    for path in protected:
+        status, payload = _call("GET", path)
+        assert status == "401 Unauthorized", (path, status, payload)
+        assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
+
+    # Configuration changes also remain private.
     for path in ("/api/settings", "/api/notifications"):
         status, payload = _call("POST", path, body=b"{}")
         assert status == "401 Unauthorized"
@@ -162,9 +165,11 @@ def test_admin_token_gates_configuration_writes_and_reads(monkeypatch):
     status, _ = _call("POST", "/api/notifications", origin=origin,
                       authorization="Bearer sekret-token", body=b"{")
     assert status == "400 Bad Request"
-    # Configuration reads are public; writes remain protected.
+    # Configuration reads and writes both remain protected.
     status, payload = _call("GET", "/api/settings", origin=origin)
-    assert status == "200 OK" and payload["ok"] is True
+    assert status == "401 Unauthorized" and payload["code"] == "ADMIN_TOKEN_REQUIRED"
+    status, payload = _call("GET", "/api/settings", origin=origin, token="sekret-token")
+    assert status == "200 OK"
 
 
 # --- scan error alert dedup ----------------------------------------------
