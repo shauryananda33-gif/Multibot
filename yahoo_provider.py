@@ -280,24 +280,24 @@ class YahooProvider:
         candidates: list[tuple[pd.DataFrame, float]] = []
         with self._lock:
             exact = self._last_success.get(key)
+            if start is None:
+                # An unrecognised period can only use an exact-key stale copy;
+                # another period cannot be proven to cover its history window.
+                if exact is None or now - exact[1] > YAHOO_STALE_GRACE_SECONDS:
+                    return None
+                frame = exact[0]
+                return frame.copy() if not frame.empty else None
             if exact is not None:
                 candidates.append(exact)
             for other_key, item in self._last_success.items():
                 if other_key == key:
                     continue
                 if other_key[0] == key[0] and other_key[2] == key[2] and other_key[3] == key[3]:
-                    # Unknown Yahoo period syntax cannot prove that a different
-                    # cached request covers the requested history.
-                    if start is not None:
-                        candidates.append(item)
+                    candidates.append(item)
         fresh = [(frame, saved) for frame, saved in candidates if now - saved <= YAHOO_STALE_GRACE_SECONDS]
         compatible = []
         for frame, saved in fresh:
             if frame.empty or not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
-                continue
-            if start is None:
-                if key in self._last_success:
-                    compatible.append((frame, saved))
                 continue
             utc_index = frame.index.tz_convert("UTC")
             if utc_index.min() > start:
