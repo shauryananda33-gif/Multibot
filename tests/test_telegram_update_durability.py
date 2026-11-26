@@ -54,7 +54,8 @@ def test_main_processes_authorized_command_before_advancing_offset(monkeypatch):
     handled = []
     monkeypatch.setattr(main, "DB", database)
     monkeypatch.setattr(main, "_handle_command", lambda chat, command: handled.append((chat, command)))
-    monkeypatch.setattr(main.settings, "telegram_chat_id", "12345")
+    from types import SimpleNamespace
+    monkeypatch.setattr(main, "settings", SimpleNamespace(telegram_chat_id="12345"))
 
     update = {
         "update_id": 99001,
