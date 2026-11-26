@@ -62,9 +62,9 @@ For each live symbol and requested interval, collect provider responses across m
 
 Until those tests pass, retain the current scheduler behavior rather than guessing.
 
-## Release items not completed by source-only repository access
+## Release status and operational gates
 
-- A fully resolved and pinned transitive dependency lockfile must be generated in the project's supported Python 3.12/Linux CI environment. The repository currently checks that `pyproject.toml` and `requirements.txt` direct runtime requirements agree, but that is not a substitute for a resolver-generated lock. No partial or fabricated lockfile is committed.
+- **Dependency lock:** Added `requirements.lock` with the complete runtime dependency version set resolved by the successful Python 3.12/Linux CI install on 2026-11-26. Added `requirements-test.lock` for the pinned test toolchain. Render and CI now install from these lockfiles; CI also runs `pip check` and tests that each direct dependency pin satisfies its declared version range. The lock pins package versions; it does not currently include artifact hashes.
 - The additive Telegram migration must be applied to the production Supabase project before deploying code that depends on it.
 - The operator must confirm `DASHBOARD_API_TOKEN` is configured in the live Render service. The value must never be copied into chat or repository files.
 - Deployment and merge remain operator-approved actions; this PR remains draft.
