@@ -332,3 +332,21 @@ def test_final_scan_history_failure_does_not_replay_completed_scan(monkeypatch):
     assert scan_calls == ["scan"]
     assert database.writes == 2
     assert main.LAST_SCANS["sweep_v2"]["status"] == "OK"
+
+
+def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
+    monkeypatch.setattr(main, "RUNTIME_LEASE_REQUIRED", True)
+    monkeypatch.setattr(main, "RUNTIME_LEADER", False)
+    monkeypatch.setattr(main, "RUNTIME_OWNER_ID", None)
+    monkeypatch.setattr(main, "ensure_runtime", lambda: None)
+    class _Registry:
+        @staticmethod
+        def ids():
+            return ["sweep_v2"]
+    monkeypatch.setattr(main, "REGISTRY", _Registry())
+
+    for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
+        status, payload = _call("GET", path, token="sekret-token")
+        assert status == "503 Service Unavailable", (path, status, payload)
+        assert "not the active" in payload["error"]
