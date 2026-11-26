@@ -26,7 +26,8 @@ class NewsGate:
                 return {match.group(1), match.group(2)}
             currency = str(getattr(asset, "currency", "") or "").upper()
             return {currency} if currency else set()
-        return set()
+        currency = str(getattr(asset, "currency", "") or "").upper()
+        return {currency} if currency else set()
 
     def check(self, asset, now):
         if not self.enabled:
