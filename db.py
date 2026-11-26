@@ -420,6 +420,84 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
             with self._connect() as c:
                 c.execute("INSERT INTO trades VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,payload=excluded.payload,updated_at=excluded.updated_at",(trade_id,status,encoded,updated_at))
         return self._retry_turso_operation(write,operation_name="save trade")
+    def open_trade_and_update_account(
+        self, trade_id, payload, updated_at, *, account_name, planned_risk,
+        reset_date, daily_trade_limit, max_daily_planned_risk,
+    ):
+        """Atomically create an OPEN trade and reserve its account risk.
+
+        Account counters are updated in SQL rather than from a process-local
+        snapshot, so simultaneous workers cannot overwrite one another's risk.
+        A failed trade insert rolls the account update back with the transaction.
+        """
+        encoded_payload = dict(payload)
+        encoded_payload["status"] = "OPEN"
+        encoded = json.dumps(encoded_payload, default=str)
+        risk = float(planned_risk)
+        def write():
+            with self._connect() as c:
+                existing = c.execute("SELECT status FROM trades WHERE id=?", (str(trade_id),)).fetchone()
+                if existing:
+                    row = c.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+                    return ("EXISTS", dict(row) if row else None)
+                changed = c.execute(
+                    """UPDATE accounts SET
+                         trades_today=CASE WHEN reset_date<>? THEN 1 ELSE trades_today+1 END,
+                         planned_risk_used=CASE WHEN reset_date<>? THEN ? ELSE planned_risk_used+? END,
+                         reset_date=?
+                       WHERE name=?
+                         AND (CASE WHEN reset_date<>? THEN 0 ELSE trades_today END) < ?
+                         AND (CASE WHEN reset_date<>? THEN 0 ELSE planned_risk_used END)+? <= ?""",
+                    (reset_date, reset_date, risk, risk, reset_date, account_name,
+                     reset_date, int(daily_trade_limit), reset_date, risk,
+                     float(max_daily_planned_risk)),
+                )
+                if changed.rowcount != 1:
+                    return ("LIMIT", None)
+                inserted = c.execute(
+                    "INSERT INTO trades(id,status,payload,updated_at) VALUES(?,?,?,?) ON CONFLICT(id) DO NOTHING",
+                    (str(trade_id), "OPEN", encoded, updated_at),
+                )
+                if inserted.rowcount != 1:
+                    raise DatabaseError(f"Trade {trade_id!r} was concurrently created; account reservation rolled back")
+                account = c.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+                if account is None:
+                    raise DatabaseError(f"Account {account_name!r} disappeared during trade creation")
+                return ("CREATED", dict(account))
+        return self._retry_turso_operation(write, operation_name="atomically open trade")
+
+    def close_trade_and_settle_account(
+        self, trade_id, payload, updated_at, *, account_name, pnl,
+        planned_risk, reset_date,
+    ):
+        """Atomically transition one OPEN trade and settle its account once."""
+        encoded_payload = dict(payload)
+        encoded_payload["status"] = "CLOSED"
+        encoded = json.dumps(encoded_payload, default=str)
+        realised = float(pnl)
+        risk = float(planned_risk)
+        def write():
+            with self._connect() as c:
+                changed = c.execute(
+                    "UPDATE trades SET status='CLOSED',payload=?,updated_at=? WHERE id=? AND status='OPEN'",
+                    (encoded, updated_at, str(trade_id)),
+                )
+                if changed.rowcount != 1:
+                    return (False, None)
+                account_update = c.execute(
+                    """UPDATE accounts SET balance=balance+?,
+                         planned_risk_used=CASE WHEN planned_risk_used>? THEN planned_risk_used-? ELSE 0 END,
+                         reset_date=? WHERE name=?""",
+                    (realised, risk, risk, reset_date, account_name),
+                )
+                if account_update.rowcount != 1:
+                    raise DatabaseError(f"Account {account_name!r} missing while settling trade {trade_id!r}")
+                account = c.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+                if account is None:
+                    raise DatabaseError(f"Account {account_name!r} disappeared during trade settlement")
+                return (True, dict(account))
+        return self._retry_turso_operation(write, operation_name="atomically close trade")
+
     def _load_trades_with(self,c,status=None):
         rows=c.execute("SELECT payload FROM trades"+(" WHERE status=?" if status else "")+" ORDER BY updated_at DESC",(status,) if status else ()).fetchall()
         return [json.loads(x["payload"]) for x in rows]
