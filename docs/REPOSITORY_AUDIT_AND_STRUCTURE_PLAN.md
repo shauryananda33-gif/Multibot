@@ -579,3 +579,6 @@ Verification on the integrated branch: GitHub Actions completed successfully wit
 - Telegram update-offset durability and exactly-once command execution across process restarts are not yet implemented.
 - Trailing-stop execution remains intentionally unsupported; no new trailing-stop behaviour has been introduced.
 - Dependency lockfile/runtime parity, migration-level Postgres integration coverage, legacy Turso documentation/schema cleanup, and the remaining repository-structure cleanups still need further work within this same draft PR.
+
+
+Additional regression hardening: unknown Yahoo period labels now use only an exact stale-cache key, and custom Global assets fall back to their configured currency for news filtering.
