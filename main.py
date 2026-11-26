@@ -1079,7 +1079,7 @@ def telegram_commands():
     while not STOP.is_set():
         try:
             _require_runtime_leader()
-            data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":DB.telegram_update_offset()},timeout=30)
+            data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":DB.telegram_update_offset(),"allowed_updates":'["message"]'},timeout=30)
             conflict_backoff=30
             for update in sorted(data.get("result", []), key=lambda item: int(item["update_id"])):
                 _process_telegram_update(update)
