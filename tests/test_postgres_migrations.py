@@ -19,6 +19,7 @@ def test_versioned_migrations_and_supabase_repository_operations(monkeypatch, tm
                 "DO $ BEGIN CREATE ROLE " + role +
                 "; EXCEPTION WHEN duplicate_object THEN NULL; END $"
             )
+        connection.execute("DROP SCHEMA IF EXISTS multibot CASCADE")
         # Supabase provides this event-trigger function. The migration only
         # revokes untrusted execution; a stub makes stock PostgreSQL suitable.
         connection.execute("""
@@ -82,5 +83,15 @@ def test_versioned_migrations_and_supabase_repository_operations(monkeypatch, tm
         assert database.claim_telegram_update(123456, "2026-11-26T11:00:00+05:30")
         database.complete_telegram_update(123456, 123457, "2026-11-26T11:00:01+05:30")
         assert database.telegram_update_offset() == 123457
+
+        from calendar_store import CalendarStore
+        calendar = CalendarStore(database=database)
+        calendar.save_week("ci-feed", "2026-11-23", [{"id": "first"}])
+        calendar.save_week("ci-feed", "2026-11-23", [{"id": "second"}])
+        cached, fetched_at = calendar.load_week("ci-feed", "2026-11-23")
+        assert cached == [{"id": "second"}]
+        assert fetched_at
+        calendar.save_attempt("ci-feed", "2026-11-23", "temporary")
+        assert calendar.load_attempt_recent("ci-feed", "2026-11-23") is not None
     finally:
         database.close()
