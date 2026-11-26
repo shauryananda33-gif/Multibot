@@ -120,7 +120,7 @@ class DatabaseManager:
     _TABLES = (
         "accounts","trades","signals","signal_events","deliveries","scan_runs",
         "scan_error_alerts","market_data_cache","forex_calendar_week_cache","app_config",
-        "forex_calendar_attempts",
+        "forex_calendar_attempts","telegram_updates","telegram_poll_state",
     )
 
     def __init__(self,path=None):
@@ -163,6 +163,8 @@ CREATE TABLE IF NOT EXISTS forex_calendar_attempts(feed_key TEXT NOT NULL,week_s
 CREATE TABLE IF NOT EXISTS multibot_migrations(migration_key TEXT PRIMARY KEY,completed_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS app_config(config_key TEXT PRIMARY KEY,payload TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS runtime_leases(lease_key TEXT PRIMARY KEY,owner_id TEXT NOT NULL,expires_at REAL NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS telegram_updates(update_id BIGINT PRIMARY KEY,status TEXT NOT NULL,received_at TEXT NOT NULL,completed_at TEXT);
+CREATE TABLE IF NOT EXISTS telegram_poll_state(singleton_id INTEGER PRIMARY KEY,next_offset BIGINT NOT NULL,updated_at TEXT NOT NULL);
 DELETE FROM signal_events WHERE rowid NOT IN (SELECT MAX(rowid) FROM signal_events GROUP BY signal_key);
 CREATE UNIQUE INDEX IF NOT EXISTS signal_events_key_uidx ON signal_events(signal_key);
 CREATE INDEX IF NOT EXISTS signal_events_timestamp_idx ON signal_events(timestamp DESC);
@@ -503,6 +505,60 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
                     raise DatabaseError(f"Account {account_name!r} disappeared during trade settlement")
                 return (True, dict(account))
         return self._retry_turso_operation(write, operation_name="atomically close trade")
+
+    # --- durable Telegram polling -------------------------------------------
+    def telegram_update_offset(self):
+        """Return the next Telegram update_id offset confirmed as processed."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT next_offset FROM telegram_poll_state WHERE singleton_id=1"
+            ).fetchone()
+        return int(row["next_offset"]) if row else 0
+
+    def claim_telegram_update(self, update_id, received_at):
+        """Create/reopen a pending update; completed updates are never replayed."""
+        update_id = int(update_id)
+        def claim():
+            with self._connect() as connection:
+                connection.execute(
+                    """INSERT INTO telegram_updates(update_id,status,received_at,completed_at)
+                       VALUES(?, 'PENDING', ?, NULL)
+                       ON CONFLICT(update_id) DO NOTHING""",
+                    (update_id, received_at),
+                )
+                row = connection.execute(
+                    "SELECT status FROM telegram_updates WHERE update_id=?",
+                    (update_id,),
+                ).fetchone()
+                return bool(row and row["status"] != "COMPLETED")
+        return self._retry_turso_operation(claim, operation_name="claim Telegram update")
+
+    def complete_telegram_update(self, update_id, next_offset, completed_at):
+        """Mark an update complete and advance the poll offset in one transaction."""
+        update_id, next_offset = int(update_id), int(next_offset)
+        def complete():
+            with self._connect() as connection:
+                changed = connection.execute(
+                    """UPDATE telegram_updates SET status='COMPLETED', completed_at=?
+                       WHERE update_id=? AND status<>'COMPLETED'""",
+                    (completed_at, update_id),
+                )
+                if changed.rowcount == 0:
+                    row = connection.execute(
+                        "SELECT status FROM telegram_updates WHERE update_id=?",
+                        (update_id,),
+                    ).fetchone()
+                    if not row or row["status"] != "COMPLETED":
+                        raise DatabaseError(f"Telegram update {update_id} was not claimed")
+                connection.execute(
+                    """INSERT INTO telegram_poll_state(singleton_id,next_offset,updated_at)
+                       VALUES(1,?,?)
+                       ON CONFLICT(singleton_id) DO UPDATE SET
+                         next_offset=MAX(telegram_poll_state.next_offset, excluded.next_offset),
+                         updated_at=excluded.updated_at""",
+                    (next_offset, completed_at),
+                )
+        return self._retry_turso_operation(complete, operation_name="complete Telegram update")
 
     def _load_trades_with(self,c,status=None):
         rows=c.execute("SELECT payload FROM trades"+(" WHERE status=?" if status else "")+" ORDER BY updated_at DESC",(status,) if status else ()).fetchall()

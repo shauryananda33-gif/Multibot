@@ -106,3 +106,20 @@ delivery-audit failure must never turn an accepted message into a failure.
 | `NOTIFICATION_CHANNELS_PATH` | where channels are saved |
 | `SUMMARY_STATE_PATH` | daily/weekly watermark file |
 | `SUMMARY_DAILY_HOUR` / `SUMMARY_WEEKLY_DAY` | when the summaries go out (IST hour, Monday=0 weekday) |
+
+
+## Durable Telegram command polling
+
+The leader process reads the next update offset from the shared Supabase
+Postgres database (or local SQLite during development). Each Telegram update
+is recorded before command execution and marked complete together with the
+next offset. Polling is sequential so an update is never acknowledged before
+its handler has returned. A pending update is retried after a process restart;
+a completed update is skipped on redelivery. Only the process holding the
+runtime lease may poll.
+
+This provides durable replay protection for completed updates. Telegram
+`sendMessage` does not expose an idempotency key, so a crash after an external
+message is accepted but before the local completion transaction can still
+cause that particular reply to be sent again; strict exactly-once delivery of
+external side effects is not claimed.

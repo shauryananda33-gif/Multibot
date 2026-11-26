@@ -1049,20 +1049,40 @@ def _telegram_api_call(token,method,payload=None,timeout=15):
     return body
 def _prepare_telegram_polling(token):
     _telegram_api_call(token,"deleteWebhook",{"drop_pending_updates":"false"}); me=_telegram_api_call(token,"getMe").get("result",{}); logger.info("Telegram polling ready: bot=@%s id=%s",me.get("username","unknown"),me.get("id","unknown"))
+def _process_telegram_update(update):
+    """Process one update before acknowledging its durable Telegram offset.
+
+    Pending updates are replayed after a crash; completed updates are skipped.
+    The single runtime lease ensures only one poller owns this state machine.
+    """
+    update_id = int(update["update_id"])
+    received_at = now().isoformat()
+    if not DB.claim_telegram_update(update_id, received_at):
+        return False
+    message = update.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    message_text = str(message.get("text", ""))
+    cmd = message_text.split()[0].split("@")[0].lower() if message_text else ""
+    if chat_id and str(chat_id) == str(settings.telegram_chat_id) and cmd:
+        # Run synchronously: acknowledging before the handler returns could
+        # lose a command if the process restarted mid-execution.
+        _handle_command(str(chat_id), cmd)
+    DB.complete_telegram_update(update_id, update_id + 1, now().isoformat())
+    return True
+
 def telegram_commands():
     token=settings.telegram_bot_token
     if not token:return
     try:_prepare_telegram_polling(token)
     except Exception as exc: logger.warning("Telegram polling initialization failed: %s",exc); STOP.wait(30)
-    offset=0; conflict_logged_at=0.0; conflict_backoff=30
+    conflict_logged_at=0.0; conflict_backoff=30
     while not STOP.is_set():
         try:
             _require_runtime_leader()
-            data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":offset},timeout=30)
+            data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":DB.telegram_update_offset()},timeout=30)
             conflict_backoff=30
-            for update in data.get("result",[]):
-                offset=int(update["update_id"])+1; message=update.get("message",{}); chat_id=message.get("chat",{}).get("id"); text=str(message.get("text","")); cmd=text.split()[0].split("@")[0].lower() if text else ""
-                if chat_id and str(chat_id)==str(settings.telegram_chat_id) and cmd: threading.Thread(target=_handle_command,args=(str(chat_id),cmd),daemon=True).start()
+            for update in sorted(data.get("result", []), key=lambda item: int(item["update_id"])):
+                _process_telegram_update(update)
         except RuntimeLeadershipError:
             logger.info("Telegram command poller exiting after leadership loss | pid=%s",os.getpid())
             break
@@ -1078,8 +1098,8 @@ def telegram_commands():
                 STOP.wait(5)
 def _telegram_command_polling_enabled():
     # Signal delivery uses sendMessage and does not require getUpdates polling.
-    # Polling is opt-in so another Telegram client cannot silently conflict with
-    # the scanner's primary signal-delivery runtime.
+    # Polling is enabled by default for the configured bot; set the environment
+    # variable to false when another consumer owns getUpdates.
     return os.getenv("TELEGRAM_COMMAND_POLLING", "true").strip().lower() in {"1","true","yes","on"}
 
 def _send_startup_announcement():

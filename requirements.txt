@@ -1,5 +1,0 @@
-pandas>=2.2,<3
-yfinance>=0.2.50,<1
-requests>=2.31,<3
-beautifulsoup4>=4.12,<5
-psycopg[binary,pool]==3.2.9
