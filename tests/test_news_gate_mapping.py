@@ -24,3 +24,8 @@ def test_news_gate_disabled_by_default_does_not_fetch_calendar():
     gate = NewsGate(ForbiddenNews())
     asset = SimpleNamespace(symbol="GC=F", market="Gold", currency="USD")
     assert gate.check(asset, "2026-11-26T10:00:00+05:30") is None
+
+
+def test_custom_global_asset_falls_back_to_its_configured_currency():
+    asset = SimpleNamespace(symbol="CUSTOM", market="Global", currency="USD")
+    assert NewsGate.currencies_for(asset) == {"USD"}
