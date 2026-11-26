@@ -23,7 +23,7 @@ This document is the seam. A new front end may be written against this file alon
 | JSON cache header | `Cache-Control: no-store` |
 | Static cache header | `Cache-Control: no-store` |
 | Serialization | `json.dumps(payload, default=str)` — **non-serializable values are stringified, never dropped** |
-| Auth | Same-origin checks apply to protected dashboard APIs. When `DASHBOARD_API_TOKEN` is configured, `/api/dashboard`, `/api/diagnostics/sweep`, `/api/calendar`, `/api/news`, `/api/backtest`, `/api/settings` and `/api/notifications` require `X-Admin-Token` or `Authorization: Bearer` (**401** `ADMIN_TOKEN_REQUIRED`). Cross-origin protected requests receive **403** `CROSS_ORIGIN`. Public `/ping` and `/api/health` expose only liveness/keepalive facts. |
+| Auth | Dashboard pages and read-only GET APIs are public. Same-origin checks apply to configuration APIs. When `DASHBOARD_API_TOKEN` is configured, POST `/api/settings` and POST `/api/notifications` require `X-Admin-Token` or `Authorization: Bearer` (**401** `ADMIN_TOKEN_REQUIRED`). Cross-origin configuration requests receive **403** `CROSS_ORIGIN`. Public `/ping` and `/api/health` expose liveness/keepalive facts. |
 | CORS | None. Same-origin only; the configuration endpoints enforce it server-side. |
 
 Because of `default=str`, a `pandas.Timestamp`, `Decimal` or `numpy.float64`
