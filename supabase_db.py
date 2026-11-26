@@ -14,6 +14,7 @@ from db import DatabaseManager as _SQLiteDatabaseManager
 from db import DatabaseError, _RemoteRow
 
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "").strip()
+SUPABASE_DB_SSLMODE = os.getenv("SUPABASE_DB_SSLMODE", "require").strip() or "require"
 
 
 def _translate_sql(sql: str) -> str:
@@ -185,7 +186,7 @@ class DatabaseManager(_SQLiteDatabaseManager):
                     timeout=10,
                     kwargs={
                         "connect_timeout": 10,
-                        "sslmode": "require",
+                        "sslmode": SUPABASE_DB_SSLMODE,
                         "application_name": "multibot2",
                         "options": "-c search_path=multibot,public",
                         "prepare_threshold": None,
