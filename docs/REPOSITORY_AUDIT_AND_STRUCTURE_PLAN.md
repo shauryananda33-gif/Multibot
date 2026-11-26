@@ -555,3 +555,27 @@ The per-operation runtime guard has a transient verification grace window, but t
 ### Manual scan serialization
 
 The scheduled scanner and Telegram `/scan` both call `run_all_cycles()`, and each Telegram update is dispatched on its own thread. There is no lock around the whole run_all_cycles/strategy-cycle operation. Add a single scan-cycle admission lock so manual and scheduled scans cannot overlap. The Yahoo provider's per-symbol lock/cache is a useful secondary safeguard, not a substitute for cycle ownership.
+
+
+## Integrated remediation update — 2026-11-26
+
+The following audited runtime findings have now been implemented on the same draft branch and covered by regression tests:
+
+- Trade opening and account risk reservation are a single transaction; daily limits are checked in the database at write time.
+- Trade closure and P&L settlement are a single conditional transaction (OPEN only), preventing duplicate settlement. Overnight closures do not debit the next day's risk budget.
+- Strategy dispatch and trade monitoring share an account lock so their in-memory account snapshots cannot overwrite each other out of order.
+- Yahoo stale-cache fallback verifies requested lookback coverage and trims returned history. Logged yfinance rate-limit diagnostics accompanying an empty frame now trigger provider-wide cooldown; an ordinary empty frame remains symbol-scoped.
+- Standby processes are prevented from invoking upstream-fetching diagnostics, backtests, and calendar endpoints.
+- Calendar persistence now receives the configured runtime database adapter (Supabase on Render), uses explicit composite-key upserts, and treats the versioned calendar tables as canonical storage.
+- Operator-assigned dynamic assets are accepted consistently by dispatch, strategy lookup, backtest and Sweep diagnostics.
+- Scheduled and manual scan cycles are serialized; post-delivery persistence failures are included in scan error counts.
+- News currency mapping now follows actual market names and parses both currencies in Forex pairs. The gate remains disabled by default.
+
+Verification on the integrated branch: GitHub Actions completed successfully with 578 passed, 0 failed. This does not mean every audit item is closed.
+
+### Still requiring further engineering or an explicit operator decision
+
+- Candle-close scheduling for generic hourly/daily strategies remains unresolved. The correct wall-clock close boundaries differ across NSE, gold, forex and crypto; changing the cadence without validating provider candle timestamps could create early scans or alter signal timing.
+- Telegram update-offset durability and exactly-once command execution across process restarts are not yet implemented.
+- Trailing-stop execution remains intentionally unsupported; no new trailing-stop behaviour has been introduced.
+- Dependency lockfile/runtime parity, migration-level Postgres integration coverage, legacy Turso documentation/schema cleanup, and the remaining repository-structure cleanups still need further work within this same draft PR.
