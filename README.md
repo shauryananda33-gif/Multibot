@@ -435,7 +435,7 @@ Health endpoint:
 Dashboard:
 
 ```text
-https://multibot-1d1fdf1c.appliedintelligencecorporation.com/dashboard
+https://multibot-3hsb.onrender.com/dashboard
 ```
 
 ---

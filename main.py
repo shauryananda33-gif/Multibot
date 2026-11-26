@@ -845,8 +845,10 @@ def _same_origin_request(env):
 def _admin_token_allowed(env):
     """Require the configured deployment admin token using constant-time comparison."""
     expected=os.getenv("DASHBOARD_API_TOKEN","").strip()
-    # Keep local-first development compatible when no deployment token is set.
-    if not expected: return True
+    # Local development may omit the token. A deployed service (PORT is set
+    # by Render and other production hosts) must fail closed when it is absent.
+    if not expected:
+        return not bool(os.getenv("PORT", "").strip())
     supplied=str(env.get("HTTP_X_ADMIN_TOKEN","") or "").strip()
     if not supplied:
         authorization=str(env.get("HTTP_AUTHORIZATION","") or "")

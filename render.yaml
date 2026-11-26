@@ -1,35 +1,33 @@
 services:
   - type: web
-    name: multibot2
+    name: Multibot
     runtime: python
     plan: free
+    region: singapore
     branch: main
     autoDeploy: true
-    buildCommand: pip install -e .
-    startCommand: python main.py
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 main.py
     healthCheckPath: /ping
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
-      - key: PORT
-        value: 10000
-      - key: DASHBOARD_URL
-        value: https://multibot-1d1fdf1c.appliedintelligencecorporation.com/dashboard
+      - key: SUPABASE_DB_URL
+        sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
-      - key: SUPABASE_DB_URL
+      - key: DASHBOARD_API_TOKEN
         sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_KEY
-        sync: false
-      - key: WEBHOOK_URL
-        sync: false
+      - key: DASHBOARD_URL
+        value: https://multibot-3hsb.onrender.com/dashboard
+      - key: ARCHITECTURE_URL
+        value: https://multibot-3hsb.onrender.com/architecture
 
-# Keep the Render web service warm with the existing external cron job.
-# Configure cron-job.org (or the service you already use) to GET:
-#   https://multibot-1d1fdf1c.appliedintelligencecorporation.com/ping
-# every 10 minutes. The endpoint is intentionally lightweight and does not
-# start a scan or mutate trading state.
+# The existing Render web service serves both the dashboard and API.
+# No external static host or API proxy is required.
+# Keep the service warm using the existing external cron job:
+#   GET https://multibot-3hsb.onrender.com/ping
+# The endpoint is intentionally lightweight and does not start a scan or
+# mutate trading state.
