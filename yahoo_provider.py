@@ -42,6 +42,24 @@ class YahooDataError(RuntimeError):
 logger = logging.getLogger(__name__)
 
 
+class _YFinanceRateLimitLogCapture(logging.Handler):
+    """Capture rate-limit diagnostics that yfinance logs instead of raising."""
+
+    _MARKERS = ("yfratelimiterror", "too many requests", "http error 429", "rate limit")
+
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.rate_limited = False
+
+    def emit(self, record):
+        try:
+            message = record.getMessage().lower()
+            if any(marker in message for marker in self._MARKERS):
+                self.rate_limited = True
+        except Exception:
+            pass
+
+
 class YahooProvider:
     """Rate-conscious Yahoo Finance provider with resilient caching."""
 
@@ -498,6 +516,9 @@ class YahooProvider:
             # yfinance returns parsed DataFrames, not raw response bodies.
             # Count the request and report parsed-frame size as an estimate only.
             from bandwidth_metrics import record as record_bandwidth
+            rate_limit_capture = _YFinanceRateLimitLogCapture()
+            yfinance_logger = logging.getLogger("yfinance")
+            yfinance_logger.addHandler(rate_limit_capture)
             try:
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
@@ -543,6 +564,8 @@ class YahooProvider:
                     self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
                     return stale
                 raise YahooDataError(f"Yahoo request failed for {symbol}: {exc}") from exc
+            finally:
+                yfinance_logger.removeHandler(rate_limit_capture)
 
             # Empty responses are ambiguous: Yahoo also returns them for
             # unavailable symbols/periods (for example GC=F intraday history).
@@ -550,10 +573,11 @@ class YahooProvider:
             # Confirmed HTTP/YF rate-limit exceptions above still use provider-wide
             # backoff; an empty response receives only a per-symbol cooldown.
             if frame is None or frame.empty:
+                logged_rate_limit = rate_limit_capture.rate_limited
                 self._activate_backoff(
                     symbol,
-                    "empty_response",
-                    provider_wide=False,
+                    "logged_rate_limit_empty_response" if logged_rate_limit else "empty_response",
+                    provider_wide=logged_rate_limit,
                 )
                 stale = self._stale(key)
                 if stale is not None:
