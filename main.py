@@ -26,7 +26,7 @@ from yahoo_provider import YahooProvider
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger=logging.getLogger("multibot2")
 warnings.filterwarnings("ignore", message="The .*generic.* unit for NumPy timedelta is deprecated.*", category=DeprecationWarning, module="yfinance\\..*")
-DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if DB.turso_enabled else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(database=DB); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); CYCLE_LOCK=threading.Lock(); NEWS_PAUSE_ENABLED=False
+DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if DB.turso_enabled else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(database=DB); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); ACCOUNT_LOCK=threading.RLock(); CYCLE_LOCK=threading.Lock(); NEWS_PAUSE_ENABLED=False
 REGISTRY=None; SERVICE=None; TRADE_MONITOR=None; SCHEDULER=StrategyScheduler(); NEWS_GATE=NewsGate(NEWS, enabled=NEWS_PAUSE_ENABLED)
 LAST_SCANS={}
 LAST_PING_AT=None
@@ -92,8 +92,8 @@ def ensure_runtime():
     logger.info("Market data cache health | enabled=%s remote=%s reason=%s",health["enabled"],health["remote"],health["reason"])
     if not ACCOUNTS: init_state()
     if REGISTRY is None: REGISTRY=discover_strategies()
-    if SERVICE is None: SERVICE=StrategyService(registry=REGISTRY,provider=YahooProvider(database=DB),database=DB,accounts=ACCOUNTS,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader)
-    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol,priority=0),accounts=ACCOUNTS)
+    if SERVICE is None: SERVICE=StrategyService(registry=REGISTRY,provider=YahooProvider(database=DB),database=DB,accounts=ACCOUNTS,account_lock=ACCOUNT_LOCK,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader)
+    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol,priority=0),accounts=ACCOUNTS,account_lock=ACCOUNT_LOCK)
     if REMINDERS is None and settings.telegram_bot_token and settings.telegram_chat_id: REMINDERS=ReminderService(DB)
     with LOCK:
         for st in REGISTRY.all():
