@@ -554,7 +554,7 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
                     """INSERT INTO telegram_poll_state(singleton_id,next_offset,updated_at)
                        VALUES(1,?,?)
                        ON CONFLICT(singleton_id) DO UPDATE SET
-                         next_offset=MAX(telegram_poll_state.next_offset, excluded.next_offset),
+                         next_offset=CASE WHEN telegram_poll_state.next_offset>excluded.next_offset THEN telegram_poll_state.next_offset ELSE excluded.next_offset END,
                          updated_at=excluded.updated_at""",
                     (next_offset, completed_at),
                 )
