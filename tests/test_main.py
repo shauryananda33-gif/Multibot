@@ -350,3 +350,45 @@ def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
         status, payload = _call("GET", path, token="sekret-token")
         assert status == "503 Service Unavailable", (path, status, payload)
         assert "not the active" in payload["error"]
+
+
+def test_manual_and_scheduled_scan_cycles_are_serialized(monkeypatch):
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(main, "_require_runtime_leader", lambda: None)
+    monkeypatch.setattr(main, "ensure_runtime", lambda: None)
+    monkeypatch.setattr(
+        main, "REGISTRY",
+        SimpleNamespace(all=lambda: [SimpleNamespace(manifest=SimpleNamespace(id="probe"))]),
+    )
+    monkeypatch.setattr(main, "SCHEDULER", SimpleNamespace(is_due=lambda *args: True))
+    barrier = threading.Barrier(3)
+    state = {"active": 0, "maximum": 0}
+    state_lock = threading.Lock()
+
+    def fake_cycle(*args, **kwargs):
+        with state_lock:
+            state["active"] += 1
+            state["maximum"] = max(state["maximum"], state["active"])
+        time.sleep(0.05)
+        with state_lock:
+            state["active"] -= 1
+        return ["done"]
+
+    monkeypatch.setattr(main, "run_strategy_cycle", fake_cycle)
+
+    def run():
+        barrier.wait()
+        main.run_all_cycles(force=True)
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=2)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert state["maximum"] == 1
