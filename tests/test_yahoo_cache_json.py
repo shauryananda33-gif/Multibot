@@ -159,3 +159,37 @@ def test_stale_compatible_cache_rejects_insufficient_lookback():
     provider._last_success[("BTC-USD", "20d", "1h", False)] = (frame, time.monotonic())
 
     assert provider._compatible_stale(("BTC-USD", "30d", "1h", False)) is None
+
+
+def test_logged_yahoo_rate_limit_empty_frame_triggers_provider_wide_backoff(monkeypatch):
+    import logging
+    import pytest
+
+    class FakeYFinance:
+        @staticmethod
+        def download(symbol, **kwargs):
+            logging.getLogger("yfinance").warning(
+                "YFRateLimitError: Too Many Requests"
+            )
+            return pd.DataFrame()
+
+    monkeypatch.setattr(yahoo_provider, "yf", FakeYFinance())
+    monkeypatch.setattr(
+        yahoo_provider.GLOBAL_YAHOO_COORDINATOR, "run",
+        lambda operation, priority=5: operation(),
+    )
+    activated = []
+    monkeypatch.setattr(
+        yahoo_provider.YahooProvider, "_activate_backoff",
+        lambda self, symbol, reason, *, provider_wide=False:
+            activated.append((symbol, reason, provider_wide)),
+    )
+
+    with pytest.raises(yahoo_provider.YahooDataError, match="no data"):
+        yahoo_provider.YahooProvider().fetch(
+            "GC=F", period="5d", interval="1h"
+        )
+
+    assert activated == [
+        ("GC=F", "logged_rate_limit_empty_response", True)
+    ]
