@@ -9,5 +9,5 @@ def test_post_delivery_status_is_not_reclassified_by_persistence_failure():
     assert "SENT_PERSISTENCE_FAILED" in source
     sent_index=source.index('self.database.record_signal_send(')
     status_index=source.index('self.database.update_signal_status(sid,"DELIVERED")', sent_index)
-    trade_index=source.index('self.database.save_trade(', status_index)
+    trade_index=source.index('self.database.open_trade_and_update_account(', status_index)
     assert sent_index < status_index < trade_index
