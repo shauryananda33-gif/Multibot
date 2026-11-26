@@ -32,3 +32,41 @@ def test_telegram_poll_offset_never_moves_backwards(tmp_path):
     assert database.claim_telegram_update(9002, "2026-11-26T10:00:02+05:30")
     database.complete_telegram_update(9002, 9003, "2026-11-26T10:00:03+05:30")
     assert database.telegram_update_offset() == 9003
+
+
+def test_main_processes_authorized_command_before_advancing_offset(monkeypatch):
+    import main
+
+    class FakeDatabase:
+        def __init__(self):
+            self.completed = set()
+            self.calls = []
+
+        def claim_telegram_update(self, update_id, received_at):
+            self.calls.append(("claim", update_id))
+            return update_id not in self.completed
+
+        def complete_telegram_update(self, update_id, next_offset, completed_at):
+            self.calls.append(("complete", update_id, next_offset))
+            self.completed.add(update_id)
+
+    database = FakeDatabase()
+    handled = []
+    monkeypatch.setattr(main, "DB", database)
+    monkeypatch.setattr(main, "_handle_command", lambda chat, command: handled.append((chat, command)))
+    monkeypatch.setattr(main.settings, "telegram_chat_id", "12345")
+
+    update = {
+        "update_id": 99001,
+        "message": {"chat": {"id": 12345}, "text": "/scan@multibot"},
+    }
+    assert main._process_telegram_update(update) is True
+    assert handled == [("12345", "/scan")]
+    assert database.calls == [
+        ("claim", 99001),
+        ("complete", 99001, 99002),
+    ]
+
+    assert main._process_telegram_update(update) is False
+    assert handled == [("12345", "/scan")]
+    assert len(database.calls) == 3
