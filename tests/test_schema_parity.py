@@ -16,6 +16,8 @@ EXPECTED_TABLES = {
     "market_data_cache",
     "forex_calendar_week_cache",
     "forex_calendar_attempts",
+    "telegram_updates",
+    "telegram_poll_state",
     "multibot_migrations",
     "app_config",
     "runtime_leases",
