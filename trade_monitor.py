@@ -52,6 +52,7 @@ class TradeMonitor:
                     row["id"], payload, current.isoformat(), account_name=row["account"],
                     pnl=pnl, planned_risk=trade.planned_risk,
                     reset_date=current.tz_convert("Asia/Kolkata").date().isoformat(),
+                    reservation_date=pd.Timestamp(row.get("opened_at", row.get("signal_ts"))).date().isoformat(),
                 )
                 if not closed_once:
                     # Another monitor pass already closed this trade. The
