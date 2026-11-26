@@ -193,3 +193,23 @@ def test_logged_yahoo_rate_limit_empty_frame_triggers_provider_wide_backoff(monk
     assert activated == [
         ("GC=F", "logged_rate_limit_empty_response", True)
     ]
+
+
+def test_unknown_stale_period_uses_only_an_exact_cache_key():
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    exact = pd.DataFrame(
+        {"open": [2.0], "high": [2.0], "low": [2.0], "close": [2.0]},
+        index=pd.DatetimeIndex([now]).tz_convert("Asia/Kolkata"),
+    )
+    other = pd.DataFrame(
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0]},
+        index=pd.DatetimeIndex([now - pd.Timedelta(days=100)]).tz_convert("Asia/Kolkata"),
+    )
+    provider._last_success[("BTC-USD", "max", "1h", False)] = (exact, time.monotonic())
+    provider._last_success[("BTC-USD", "5d", "1h", False)] = (other, time.monotonic())
+
+    result = provider._compatible_stale(("BTC-USD", "max", "1h", False))
+
+    assert result is not None
+    assert result["close"].iloc[0] == 2.0
