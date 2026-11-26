@@ -25,7 +25,12 @@ class StrategyRegistry:
     def get(self, strategy_id: str) -> Strategy: return self._strategies[strategy_id]
     def all(self) -> tuple[Strategy, ...]: return tuple(self._strategies.values())
     def for_symbol(self, symbol: str) -> tuple[Strategy, ...]:
-        return tuple(s for s in self._strategies.values() if symbol in s.manifest.assets)
+        from config import EXTRA_ASSET_STRATEGIES
+        return tuple(
+            strategy for strategy in self._strategies.values()
+            if symbol in strategy.manifest.assets
+            or strategy.manifest.id in EXTRA_ASSET_STRATEGIES.get(symbol, ())
+        )
     def ids(self) -> tuple[str, ...]: return tuple(self._strategies)
 
 def discover_strategies() -> StrategyRegistry:
