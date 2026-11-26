@@ -256,12 +256,8 @@ class YahooProvider:
             return None
 
     def _compatible_stale(self, key: tuple[str, str, str, bool]) -> Optional[pd.DataFrame]:
-        """Return recent data only from the same symbol and interval.
-
-        Period may differ because a larger history request can safely satisfy a
-        shorter lookback after the caller receives the frame. Intervals are never
-        mixed, preventing accidental 1d/30m/1h strategy input substitution.
-        """
+        """Return recent, same-symbol/interval stale data covering the requested window."""
+        start = self._period_start(key[1])
         now = time.monotonic()
         candidates: list[tuple[pd.DataFrame, float]] = []
         with self._lock:
@@ -272,11 +268,28 @@ class YahooProvider:
                 if other_key == key:
                     continue
                 if other_key[0] == key[0] and other_key[2] == key[2] and other_key[3] == key[3]:
-                    candidates.append(item)
+                    # Unknown Yahoo period syntax cannot prove that a different
+                    # cached request covers the requested history.
+                    if start is not None:
+                        candidates.append(item)
         fresh = [(frame, saved) for frame, saved in candidates if now - saved <= YAHOO_STALE_GRACE_SECONDS]
-        if not fresh:
+        compatible = []
+        for frame, saved in fresh:
+            if frame.empty or not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+                continue
+            if start is None:
+                if key in self._last_success:
+                    compatible.append((frame, saved))
+                continue
+            utc_index = frame.index.tz_convert("UTC")
+            if utc_index.min() > start:
+                continue
+            trimmed = frame.loc[utc_index >= start].copy()
+            if not trimmed.empty:
+                compatible.append((trimmed, saved))
+        if not compatible:
             return None
-        frame, _ = max(fresh, key=lambda item: item[1])
+        frame, _ = max(compatible, key=lambda item: item[1])
         logger.info(
             "Yahoo stale fallback | symbol=%s requested=%s compatible_cache=true",
             key[0], self._key_id(key),
