@@ -468,7 +468,7 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
 
     def close_trade_and_settle_account(
         self, trade_id, payload, updated_at, *, account_name, pnl,
-        planned_risk, reset_date,
+        planned_risk, reset_date, reservation_date=None,
     ):
         """Atomically transition one OPEN trade and settle its account once."""
         encoded_payload = dict(payload)
@@ -476,6 +476,7 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
         encoded = json.dumps(encoded_payload, default=str)
         realised = float(pnl)
         risk = float(planned_risk)
+        reservation_date = str(reservation_date or reset_date)
         def write():
             with self._connect() as c:
                 changed = c.execute(
@@ -486,9 +487,14 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
                     return (False, None)
                 account_update = c.execute(
                     """UPDATE accounts SET balance=balance+?,
-                         planned_risk_used=CASE WHEN planned_risk_used>? THEN planned_risk_used-? ELSE 0 END,
+                         trades_today=CASE WHEN reset_date<>? THEN 0 ELSE trades_today END,
+                         planned_risk_used=CASE
+                           WHEN reset_date<>? THEN 0
+                           WHEN ?=? THEN CASE WHEN planned_risk_used>? THEN planned_risk_used-? ELSE 0 END
+                           ELSE planned_risk_used END,
                          reset_date=? WHERE name=?""",
-                    (realised, risk, risk, reset_date, account_name),
+                    (realised, reset_date, reset_date, reservation_date, reset_date,
+                     risk, risk, reset_date, account_name),
                 )
                 if account_update.rowcount != 1:
                     raise DatabaseError(f"Account {account_name!r} missing while settling trade {trade_id!r}")
