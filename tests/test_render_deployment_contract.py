@@ -14,7 +14,7 @@ def test_render_blueprint_matches_the_live_single_web_service():
     assert "runtime: python" in config
     assert "region: singapore" in config
     assert "branch: main" in config
-    assert "buildCommand: pip install -r requirements.txt" in config
+    assert "buildCommand: pip install -r requirements.lock" in config
     assert "startCommand: python3 main.py" in config
     assert "healthCheckPath: /ping" in config
     assert "https://multibot-3hsb.onrender.com/dashboard" in config
