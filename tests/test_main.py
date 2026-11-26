@@ -328,7 +328,7 @@ def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
     monkeypatch.setattr(main, "REGISTRY", _Registry())
 
     for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
-        status, payload = _call("GET", path)
+        status, payload = _call("GET", path, token="sekret-token")
         assert status == "503 Service Unavailable", (path, status, payload)
         assert "not the active" in payload["error"]
 
