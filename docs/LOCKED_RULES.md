@@ -28,7 +28,7 @@ budget. Reset-to-defaults always returns to the values in `config.py`.
 | 6 | **1.0× leverage — never higher** | `LEVERAGE = 1.0` | `config.py:243` |
 | 7 | **Freshness is exactly 1 hour** | `SIGNAL_FRESHNESS_HOURS = 1` | `config.py:16` |
 | 8 | **Max 2 sends per signal identity** | `send_count` caps at 2 | `db.py::record_signal_send` |
-| 9 | **Turso/libSQL is the durable primary database** | Runtime records persist remotely; local SQLite is used for development and one-time legacy import | `db.py`, `calendar_store.py` |
+| 9 | **Supabase Postgres is the durable production database** | Runtime records persist in the private `multibot` schema; SQLite is local development only. Versioned Supabase migrations are authoritative. | `supabase_db.py`, `supabase/migrations/` |
 | 10 | **IST everywhere** | `Asia/Kolkata` | `config.py:14` |
 | 11 | **Signals on completed candles only** | `schedule = "completed_candle"` | `strategies/*.py::prepare_candles` |
 

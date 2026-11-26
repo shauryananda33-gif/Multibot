@@ -582,3 +582,16 @@ Verification on the integrated branch: GitHub Actions completed successfully wit
 
 
 Additional regression hardening: unknown Yahoo period labels now use only an exact stale-cache key, and custom Global assets fall back to their configured currency for news filtering.
+
+
+## Integrated remediation update — Telegram, Postgres integration and dependency parity
+
+The same draft PR now also includes:
+
+- Durable Telegram update IDs and the next polling offset in Supabase Postgres (SQLite for local tests). Updates are processed sequentially; pending updates are replayed after restart and completed updates are skipped. External Telegram side effects are documented as at-least-once across the narrow crash window because Telegram does not expose a send idempotency key.
+- A new additive migration for `telegram_updates` and `telegram_poll_state`; previously applied migrations remain immutable.
+- GitHub Actions provisions disposable PostgreSQL 16, applies all versioned migrations, checks RLS/table presence, and exercises Supabase repository transactions plus calendar cache upserts.
+- CI installs from `requirements-test.txt`, which includes the same `requirements.txt` used by Render. A test checks that runtime dependency specifiers in `pyproject.toml` and `requirements.txt` do not drift.
+- The dashboard database label now reports `SUPABASE_POSTGRES` instead of the misleading legacy `TURSO` compatibility flag.
+
+The dependency declarations are aligned but not yet fully pinned in a generated lockfile. Generic candle-close scheduling remains unchanged: the provider's actual timestamp/close boundaries still need market-by-market verification before modifying scan timing. Trailing-stop execution remains unsupported and untouched.
