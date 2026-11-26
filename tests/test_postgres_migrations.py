@@ -55,6 +55,7 @@ def test_versioned_migrations_and_supabase_repository_operations(monkeypatch, tm
 
     import supabase_db
     monkeypatch.setattr(supabase_db, "SUPABASE_DB_URL", URL)
+    monkeypatch.setattr(supabase_db, "SUPABASE_DB_SSLMODE", "disable")
     database = supabase_db.DatabaseManager(str(tmp_path / "unused.db"))
     try:
         accounts = database.load_accounts(["macro"], {"macro": 100000}, "2026-11-26")
