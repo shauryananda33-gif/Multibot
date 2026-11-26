@@ -5,7 +5,7 @@ from threading import RLock
 import json
 import logging
 import pandas as pd
-from config import ACCOUNT_SIZES,LIVE_ASSET_MAP,USD_TO_INR,account_names,assets_for_strategy,resolve_account
+from config import ACCOUNT_SIZES,EXTRA_ASSET_STRATEGIES,LIVE_ASSET_MAP,USD_TO_INR,account_names,assets_for_strategy,resolve_account
 from db import DatabaseError,DatabaseManager
 from notification_service import NotificationService
 from signal_gate import SignalGate
@@ -46,7 +46,7 @@ class StrategyService:
 
     def scan_symbol(self,strategy_id,symbol,*,now=None,period="30d"):
         strategy=self.registry.get(strategy_id); current=self._now(now)
-        if symbol not in strategy.manifest.assets: raise ValueError(f"{strategy_id} does not support {symbol}")
+        if symbol not in strategy.manifest.assets and strategy_id not in EXTRA_ASSET_STRATEGIES.get(symbol, ()): raise ValueError(f"{strategy_id} does not support {symbol}")
         asset=LIVE_ASSET_MAP[symbol]
         interval,fetch_period=strategy.data_request(symbol,period=period)
         # Filled by the provider as the frame is obtained: when validation
