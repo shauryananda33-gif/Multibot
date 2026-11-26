@@ -244,7 +244,7 @@ def monitor_loop():
 def _backtest_payload(strategy,symbol,period):
     _require_runtime_leader()
     ensure_runtime(); key=strategy.strip().lower(); st=REGISTRY.get(key); symbol=symbol.strip().upper()
-    if symbol not in st.manifest.assets: raise ValueError(f"{key} does not support {symbol}")
+    if symbol not in st.manifest.assets and key not in EXTRA_ASSET_STRATEGIES.get(symbol, ()): raise ValueError(f"{key} does not support {symbol}")
     frame=SERVICE.engine.fetch(st,symbol,period=period)
     # Backtests route on the same table as live dispatch, so a backtest of an
     # asset is charged to the account that would actually trade it.
@@ -273,7 +273,7 @@ def _backtest_payload(strategy,symbol,period):
     for trade in result.trades:
         equity += float(trade.pnl)
         equity_curve.append({"timestamp": trade.timestamp.isoformat(), "equity": round(equity, 2)})
-    return {"ok":True,"strategy":result.strategy,"strategy_id":st.manifest.id,"strategy_version":result.strategy_version,"symbol":symbol,"asset":BACKTEST_ASSETS[symbol],"period":period,"parameters":result.parameters,"candle_count":len(frame),"buy_signals":buy_signals,"sell_signals":sell_signals,"trades_taken":trades_taken,"planned_risk":planned_risk,"equity_curve":equity_curve,"metrics":{"return_pct":m.return_pct,"max_drawdown_pct":m.max_drawdown_pct,"sharpe":m.sharpe,"sortino":m.sortino,"win_rate_pct":m.win_rate_pct,"profit_factor":m.profit_factor,"number_of_trades":m.number_of_trades,"average_trade":m.average_trade,"max_losing_streak":m.max_losing_streak,"exposure_pct":m.exposure_pct,"risk_adjusted_performance":m.risk_adjusted_performance,"rating":m.rating,"rating_label":m.rating_label,"breakdown":m.breakdown},"daily":[{"date":d,**v} for d,v in sorted(daily.items())],"signals":signals,"trades":[{"timestamp":x.timestamp.isoformat(),"direction":x.direction,"entry":x.entry,"exit":x.exit,"pnl":x.pnl,"bars_held":x.bars_held} for x in result.trades][-200:],"generated_at":now().isoformat()}
+    return {"ok":True,"strategy":result.strategy,"strategy_id":st.manifest.id,"strategy_version":result.strategy_version,"symbol":symbol,"asset":LIVE_ASSET_MAP[symbol].label,"period":period,"parameters":result.parameters,"candle_count":len(frame),"buy_signals":buy_signals,"sell_signals":sell_signals,"trades_taken":trades_taken,"planned_risk":planned_risk,"equity_curve":equity_curve,"metrics":{"return_pct":m.return_pct,"max_drawdown_pct":m.max_drawdown_pct,"sharpe":m.sharpe,"sortino":m.sortino,"win_rate_pct":m.win_rate_pct,"profit_factor":m.profit_factor,"number_of_trades":m.number_of_trades,"average_trade":m.average_trade,"max_losing_streak":m.max_losing_streak,"exposure_pct":m.exposure_pct,"risk_adjusted_performance":m.risk_adjusted_performance,"rating":m.rating,"rating_label":m.rating_label,"breakdown":m.breakdown},"daily":[{"date":d,**v} for d,v in sorted(daily.items())],"signals":signals,"trades":[{"timestamp":x.timestamp.isoformat(),"direction":x.direction,"entry":x.entry,"exit":x.exit,"pnl":x.pnl,"bars_held":x.bars_held} for x in result.trades][-200:],"generated_at":now().isoformat()}
 def _scan_error_alert_state(strategy_ids, entries=None):
     """Persisted incident rows for the dashboard's scan diagnostics (no secrets).
 
@@ -783,9 +783,7 @@ def _sweep_diagnostic_payload(*, period="30d"):
     current = now()
     rows = []
     totals = {"assets": 0, "ok": 0, "errors": 0, "directional": 0, "reasons": {}}
-    for asset in live_assets():
-        if asset.symbol not in strategy.manifest.assets:
-            continue
+    for asset in assets_for_strategy(strategy.manifest.id):
         totals["assets"] += 1
         row = {"symbol": asset.symbol, "label": asset.label, "market": asset.market,
                "timeframe": asset.sweep_timeframe}
@@ -1015,7 +1013,7 @@ def _handle_command(chat_id,cmd):
     try:
         if cmd in ("/start","/menu"): _send_chat(chat_id,msg_start())
         elif cmd=="/whatsnew": _send_chat(chat_id,msg_whats_new())
-        elif cmd in ("/check","/scan"): _send_chat(chat_id,msg_scan_started()); results=run_all_cycles(send=True,force=True); _send_chat(chat_id,msg_scan_result(sum(r.sent for r in results),sum(len(st.manifest.assets) for st in REGISTRY.all())))
+        elif cmd in ("/check","/scan"): _send_chat(chat_id,msg_scan_started()); results=run_all_cycles(send=True,force=True); _send_chat(chat_id,msg_scan_result(sum(r.sent for r in results),sum(len(assets_for_strategy(st.manifest.id)) for st in REGISTRY.all())))
         elif cmd=="/balance": _send_chat(chat_id,msg_balance(ACCOUNTS))
         elif cmd=="/summary": _send_chat(chat_id,msg_summary(DB.load_trades("OPEN"),DB.load_trades("CLOSED")))
         elif cmd=="/risk": _send_chat(chat_id,msg_risk(DB.load_trades("OPEN")))
