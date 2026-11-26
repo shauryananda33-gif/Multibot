@@ -84,34 +84,23 @@ def test_configuration_reads_stay_open_without_deployment_token(monkeypatch):
     assert status == "200 OK" and payload["ok"] is True
 
 
-def test_sensitive_dashboard_apis_require_token_when_configured(monkeypatch):
+def test_dashboard_read_apis_are_public_but_configuration_writes_require_token(monkeypatch):
     monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
-    protected = (
-        "/api/dashboard",
-        "/api/diagnostics/sweep",
-        "/api/calendar",
-        "/api/news",
-        "/api/backtest",
-        "/api/settings",
-        "/api/notifications",
-    )
-    for path in protected:
+    # Public read-only APIs must work without any token.
+    monkeypatch.setattr(main, "_sweep_diagnostic_payload", lambda **kwargs: {"ok": True})
+    monkeypatch.setattr(main, "_calendar_payload", lambda query: {"ok": True})
+    monkeypatch.setattr(main, "_backtest_payload", lambda *args: {"ok": True})
+    for path in ("/api/dashboard", "/api/diagnostics/sweep", "/api/calendar",
+                 "/api/news", "/api/backtest", "/api/settings", "/api/notifications"):
         status, payload = _call("GET", path)
-        assert status == "401 Unauthorized", (path, status)
-        assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
+        assert status == "200 OK" and payload["ok"] is True, (path, status, payload)
 
-        status, payload = _call("GET", path, token="wrong-token")
-        assert status == "401 Unauthorized", (path, status)
-        assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
-
+    # Configuration writes remain private even though the dashboard is public.
     for path in ("/api/settings", "/api/notifications"):
         status, payload = _call("POST", path, body=b"{}")
-        assert status == "401 Unauthorized", (path, status)
-        assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
+        assert status == "401 Unauthorized"
+        assert payload["code"] == "ADMIN_TOKEN_REQUIRED"
 
-    # Private dashboard data accepts a valid token.
-    status, payload = _call("GET", "/api/dashboard", token="sekret-token")
-    assert status == "200 OK" and payload["ok"] is True
     # Health remains public and exposes only status/keepalive, never deployment secrets.
     status, payload = _call("GET", "/api/health")
     assert status == "200 OK"
@@ -121,17 +110,6 @@ def test_sensitive_dashboard_apis_require_token_when_configured(monkeypatch):
     }
     assert payload["ok"] is True
     assert payload["status"] == "ONLINE"
-    # Secondary protected routes also proceed with the correct token; replace
-    # expensive/news-dependent handlers with deterministic test doubles.
-    monkeypatch.setattr(main, "_sweep_diagnostic_payload", lambda **kwargs: {"ok": True})
-    monkeypatch.setattr(main, "_calendar_payload", lambda query: {"ok": True})
-    monkeypatch.setattr(main, "_backtest_payload", lambda *args: {"ok": True})
-    for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
-        status, payload = _call("GET", path, token="sekret-token")
-        assert status == "200 OK" and payload["ok"] is True, (path, status, payload)
-    for path in ("/api/settings", "/api/notifications"):
-        status, payload = _call("GET", path, token="sekret-token")
-        assert status == "200 OK" and payload["ok"] is True, (path, status, payload)
 
 
 def test_ping_remains_public_with_deployment_token(monkeypatch):
@@ -184,11 +162,9 @@ def test_admin_token_gates_configuration_writes_and_reads(monkeypatch):
     status, _ = _call("POST", "/api/notifications", origin=origin,
                       authorization="Bearer sekret-token", body=b"{")
     assert status == "400 Bad Request"
-    # Protected configuration reads need the same token.
+    # Configuration reads are public; writes remain protected.
     status, payload = _call("GET", "/api/settings", origin=origin)
-    assert status == "401 Unauthorized" and payload["code"] == "ADMIN_TOKEN_REQUIRED"
-    status, payload = _call("GET", "/api/settings", origin=origin, token="sekret-token")
-    assert status == "200 OK"
+    assert status == "200 OK" and payload["ok"] is True
 
 
 # --- scan error alert dedup ----------------------------------------------
@@ -347,7 +323,7 @@ def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
     monkeypatch.setattr(main, "REGISTRY", _Registry())
 
     for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
-        status, payload = _call("GET", path, token="sekret-token")
+        status, payload = _call("GET", path)
         assert status == "503 Service Unavailable", (path, status, payload)
         assert "not the active" in payload["error"]
 
