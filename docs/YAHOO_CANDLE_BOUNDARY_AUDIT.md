@@ -65,6 +65,6 @@ Until those tests pass, retain the current scheduler behavior rather than guessi
 ## Release status and operational gates
 
 - **Dependency lock:** Added `requirements.lock` with the complete runtime dependency version set resolved by the successful Python 3.12/Linux CI install on 2026-11-26. Added `requirements-test.lock` for the pinned test toolchain. Render and CI now install from these lockfiles; CI also runs `pip check` and tests that each direct dependency pin satisfies its declared version range. The lock pins package versions; it does not currently include artifact hashes.
-- The additive Telegram migration must be applied to the production Supabase project before deploying code that depends on it.
+- **Telegram migration:** Applied to production Supabase project `pmhmoekqdbozsczwbnlb` as migration version `20261126112433`. Verified both `multibot.telegram_updates` and `multibot.telegram_poll_state` exist and have RLS enabled. The repository migration filename was aligned to the exact applied version.
 - The operator must confirm `DASHBOARD_API_TOKEN` is configured in the live Render service. The value must never be copied into chat or repository files.
 - Deployment and merge remain operator-approved actions; this PR remains draft.
