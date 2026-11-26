@@ -122,3 +122,40 @@ def test_provider_wide_backoff_survives_provider_recreation():
     replacement = yahoo_provider.YahooProvider(database=db)
     assert replacement.in_backoff("RELIANCE.NS")
     assert replacement._in_backoff("RELIANCE.NS") > 0
+
+
+
+def test_stale_compatible_cache_is_trimmed_to_requested_lookback():
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    index = pd.DatetimeIndex(
+        [now - pd.Timedelta(days=45), now - pd.Timedelta(days=20), now - pd.Timedelta(days=2)]
+    ).tz_convert("Asia/Kolkata")
+    frame = pd.DataFrame(
+        {"open": [1.0, 2.0, 3.0], "high": [1.0, 2.0, 3.0],
+         "low": [1.0, 2.0, 3.0], "close": [1.0, 2.0, 3.0]},
+        index=index,
+    )
+    provider._last_success[("BTC-USD", "60d", "1h", False)] = (frame, time.monotonic())
+
+    result = provider._compatible_stale(("BTC-USD", "30d", "1h", False))
+
+    assert result is not None
+    assert len(result) == 2
+    assert result.index.min().tz_convert("UTC") >= yahoo_provider.YahooProvider._period_start("30d")
+
+
+def test_stale_compatible_cache_rejects_insufficient_lookback():
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    index = pd.DatetimeIndex(
+        [now - pd.Timedelta(days=20), now - pd.Timedelta(days=2)]
+    ).tz_convert("Asia/Kolkata")
+    frame = pd.DataFrame(
+        {"open": [1.0, 2.0], "high": [1.0, 2.0],
+         "low": [1.0, 2.0], "close": [1.0, 2.0]},
+        index=index,
+    )
+    provider._last_success[("BTC-USD", "20d", "1h", False)] = (frame, time.monotonic())
+
+    assert provider._compatible_stale(("BTC-USD", "30d", "1h", False)) is None
