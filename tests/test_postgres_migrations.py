@@ -13,6 +13,12 @@ def test_versioned_migrations_and_supabase_repository_operations(monkeypatch, tm
 
     root = Path(__file__).resolve().parents[1]
     with psycopg.connect(URL, autocommit=True) as connection:
+        # Supabase's built-in API roles are absent from stock PostgreSQL.
+        for role in ("anon", "authenticated"):
+            connection.execute(
+                "DO $ BEGIN CREATE ROLE " + role +
+                "; EXCEPTION WHEN duplicate_object THEN NULL; END $"
+            )
         # Supabase provides this event-trigger function. The migration only
         # revokes untrusted execution; a stub makes stock PostgreSQL suitable.
         connection.execute("""
