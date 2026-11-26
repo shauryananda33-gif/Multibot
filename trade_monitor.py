@@ -11,8 +11,9 @@ from telegram import trade_closed_message
 logger=logging.getLogger("multibot2.trade_monitor")
 
 class TradeMonitor:
-    def __init__(self,*,database:DatabaseManager,price_lookup,accounts:dict,notifier=None):
-        self.database=database; self.price_lookup=price_lookup; self.accounts=accounts; self.notifier=notifier or NotificationService(database)
+    def __init__(self,*,database:DatabaseManager,price_lookup,accounts:dict,account_lock=None,notifier=None):
+        from threading import RLock
+        self.database=database; self.price_lookup=price_lookup; self.accounts=accounts; self.account_lock=account_lock or RLock(); self.notifier=notifier or NotificationService(database)
 
     def _hit(self,row,price):
         side=row.get("type","BUY")
@@ -46,26 +47,27 @@ class TradeMonitor:
                 # P&L outside the strategy risk/reward contract.
                 exit_price = float(trade.plan.stop_loss if reason == "STOP_LOSS" else trade.plan.take_profit)
                 closed_trade=close_trade(trade,exit_price=exit_price,exit_timestamp=current,exit_reason=reason)
-                pnl=realized_pnl(trade,exit_price=exit_price)
-                payload=dict(row); payload.update({"status":"CLOSED","exit_price":exit_price,"exit_reason":reason,"closed_at":current.isoformat(),"pnl":pnl,"result":"WIN" if pnl>=0 else "LOSS"})
-                closed_once, account_row = self.database.close_trade_and_settle_account(
-                    row["id"], payload, current.isoformat(), account_name=row["account"],
-                    pnl=pnl, planned_risk=trade.planned_risk,
-                    reset_date=current.tz_convert("Asia/Kolkata").date().isoformat(),
-                    reservation_date=pd.Timestamp(row.get("opened_at", row.get("signal_ts"))).date().isoformat(),
-                )
-                if not closed_once:
-                    # Another monitor pass already closed this trade. The
-                    # conditional status transition guarantees no second P&L.
-                    continue
-                if account_row is None:
-                    raise RuntimeError(f"Account {row['account']!r} missing after trade settlement")
-                updated=AccountState(
-                    row["account"], float(account_row["starting_balance"]),
-                    float(account_row["balance"]), float(account_row["planned_risk_used"]),
-                    int(account_row["trades_today"]),
-                )
-                self.accounts[row["account"]]=updated
+                with self.account_lock:
+                    pnl=realized_pnl(trade,exit_price=exit_price)
+                    payload=dict(row); payload.update({"status":"CLOSED","exit_price":exit_price,"exit_reason":reason,"closed_at":current.isoformat(),"pnl":pnl,"result":"WIN" if pnl>=0 else "LOSS"})
+                    closed_once, account_row = self.database.close_trade_and_settle_account(
+                        row["id"], payload, current.isoformat(), account_name=row["account"],
+                        pnl=pnl, planned_risk=trade.planned_risk,
+                        reset_date=current.tz_convert("Asia/Kolkata").date().isoformat(),
+                        reservation_date=pd.Timestamp(row.get("opened_at", row.get("signal_ts"))).date().isoformat(),
+                    )
+                    if not closed_once:
+                        # Another monitor pass already closed this trade. The
+                        # conditional status transition guarantees no second P&L.
+                        continue
+                    if account_row is None:
+                        raise RuntimeError(f"Account {row['account']!r} missing after trade settlement")
+                    updated=AccountState(
+                        row["account"], float(account_row["starting_balance"]),
+                        float(account_row["balance"]), float(account_row["planned_risk_used"]),
+                        int(account_row["trades_today"]),
+                    )
+                    self.accounts[row["account"]]=updated
                 signal_id=str(row.get("signal_id") or row["id"])
                 message=trade_closed_message(closed_trade,exit_price,pnl,updated.balance,trade.plan.side=="BUY",reason=="TAKE_PROFIT")
                 self.notifier.deliver(signal_id=signal_id,message=message,kind="TRADE_CLOSED",metadata={"trade_id":row["id"],"reason":reason,"pnl":pnl})
