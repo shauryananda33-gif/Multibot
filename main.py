@@ -943,7 +943,10 @@ def build_app():
                 logger.exception("Notification channel request failed")
                 return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error")
         if path in ("/api/calendar","/api/news"):
-            guard=_admin_api_guard(env,start)
+            # Economic calendar and news are public read-only market information.
+            # Keep writes/configuration protected, but do not require an admin
+            # token merely to view these public data feeds.
+            guard=_admin_api_guard(env,start,require_token=False)
             if guard is not None: return guard
             try:return _json_response(start,_calendar_payload(query))
             except RuntimeLeadershipError as exc:return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
