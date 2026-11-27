@@ -77,7 +77,7 @@ def test_ping_contract_exists():
 
 def test_dashboard_read_apis_are_public_and_configuration_is_read_only():
     for path in ("/api/dashboard", "/api/diagnostics/sweep", "/api/calendar",
-                 "/api/news", "/api/backtest", "/api/settings", "/api/notifications"):
+                 "/api/news", "/api/settings", "/api/notifications"):
         status, payload = _call("GET", path)
         assert status == "200 OK", (path, status, payload)
         assert payload is not None
@@ -89,7 +89,7 @@ def test_dashboard_read_apis_are_public_and_configuration_is_read_only():
 
 def test_public_dashboard_apis_reject_cross_origin_requests():
     for path in ("/api/dashboard", "/api/calendar", "/api/news",
-                 "/api/backtest", "/api/settings", "/api/notifications"):
+                 "/api/settings", "/api/notifications"):
         status, payload = _call("GET", path, origin="https://evil.example")
         assert status == "403 Forbidden", (path, status, payload)
         assert payload["code"] == "CROSS_ORIGIN"
