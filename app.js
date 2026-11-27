@@ -24,23 +24,21 @@ function dateInputValue(value){const d=value instanceof Date?value:new Date(valu
 function dateKey(value){if(!value)return "unknown";const d=new Date(value);if(Number.isNaN(d.getTime()))return "unknown";return dateInputValue(d);}
 function clock(){return new Intl.DateTimeFormat("en-IN",{timeZone:CONFIG.timezone,hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date());}
 function safeApiError(status,text){const compact=String(text||"").replace(/\s+/g," ").trim();return compact?`HTTP ${status}: ${compact.slice(0,240)}`:`HTTP ${status}`;}const ADMIN_TOKEN_STORAGE_KEY="mavis-admin-token";
-function withAdminToken(options={}){const token=localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);if(!token)return options;return {...options,headers:{...(options.headers||{}),"X-Admin-Token":token}};}
-function requestAdminToken(){const entered=window.prompt("This dashboard requires its admin token. Enter DASHBOARD_API_TOKEN:","");if(!entered||!entered.trim())return "";const token=entered.trim();localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY,token);return token;}
-// One canonical path for protected API requests: attach the operator's admin
-// token and, on a 401 ADMIN_TOKEN_REQUIRED, ask once, remember it and retry.
+function readStoredAdminToken(){try{return localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)||"";}catch(error){console.warn("Admin-token storage is unavailable in this browser.",error);return "";}}
+function withAdminToken(options={},token=readStoredAdminToken()){if(!token)return options;return {...options,headers:{...(options.headers||{}),"X-Admin-Token":token}};}
+function requestAdminToken(){const entered=window.prompt("This dashboard requires its admin token. Enter DASHBOARD_API_TOKEN:","");if(!entered||!entered.trim())return "";const token=entered.trim();try{localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY,token);}catch(error){console.warn("Could not persist the admin token in this browser.",error);}return token;}
+// Ask only when no token is saved. A saved-but-rejected token must not trigger
+// another blocking prompt on every protected API request or page visit.
 async function adminFetch(url,options={}){
-  let response=await fetch(url,withAdminToken(options));
-  if(response.status===401){
-    let payload=null;
-    try{payload=JSON.parse(await response.clone().text());}catch(error){}
-    if(payload&&payload.code==="ADMIN_TOKEN_REQUIRED"){
-      const entered=requestAdminToken();
-      if(entered){
-        const headers={...(options.headers||{}),"X-Admin-Token":entered};
-        response=await fetch(url,{...options,headers});
-      }
-    }
-  }
+  let token=readStoredAdminToken();
+  let response=await fetch(url,withAdminToken(options,token));
+  if(response.status!==401)return response;
+  let payload=null;
+  try{payload=JSON.parse(await response.clone().text());}catch(error){}
+  if(!payload||payload.code!=="ADMIN_TOKEN_REQUIRED"||token)return response;
+  token=requestAdminToken();
+  if(!token)return response;
+  response=await fetch(url,withAdminToken(options,token));
   return response;
 }
 async function readJsonResponse(response,context="Request"){
