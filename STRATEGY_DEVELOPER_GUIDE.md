@@ -12,7 +12,6 @@ A new strategy should normally require only:
 strategies/<strategy_id>/
 ├── __init__.py
 ├── strategy.py
-├── manifest.yaml
 └── tests/
 ```
 
@@ -31,7 +30,7 @@ The plug-in must expose:
 - optional `data_request()`
 - optional `prepare_candles()`
 - optional `build_trade_plan()`
-- optional `trailing_policy()`
+- optional `trailing_policy()` metadata (not executed by the current live monitor/backtester)
 - optional `backtest_signal()`
 - `create_strategy()` factory
 
@@ -43,7 +42,7 @@ A directional signal must provide valid initial SL and TP through either the sig
 
 ## 2. Manifest
 
-The manifest declares the strategy's operational contract:
+The Python `StrategyManifest` object in the plug-in declares the strategy's operational contract. The registry does not load a separate YAML manifest.
 
 ```text
 id
@@ -205,7 +204,7 @@ If a new strategy genuinely requires a new capability, add a **generic interface
 
 ## 8. Dashboard configuration
 
-The manifest is designed to become the source for Strategy Manager controls.
+Manifest parameters currently describe strategy metadata. They are not yet a persisted, runtime-editable settings interface.
 
 A parameter may be:
 
@@ -216,7 +215,9 @@ strategy-defined
 system-controlled
 ```
 
-The dashboard may expose strategy settings but must validate them against the strategy contract.
+Do not present manifest parameters as editable runtime controls until a durable settings path is implemented and tested.
+
+Trailing-stop execution is currently unsupported even though Trend Pulse declares trailing-stop metadata. Do not rely on that metadata to manage a paper trade.
 
 The dashboard must never be the authority for:
 

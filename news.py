@@ -43,8 +43,8 @@ IMPACTS = ("High", "Medium", "Low", "Holiday")
 class CalendarService:
     """Return all cached events grouped by date; never poll upstream from the UI."""
 
-    def __init__(self, path: str | None = None) -> None:
-        self.store = CalendarStore(path)
+    def __init__(self, path: str | None = None, *, database=None) -> None:
+        self.store = CalendarStore(path, database=database)
         self._lock = RLock()
 
     @staticmethod

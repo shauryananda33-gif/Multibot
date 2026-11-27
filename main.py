@@ -26,7 +26,7 @@ from yahoo_provider import YahooProvider
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger=logging.getLogger("multibot2")
 warnings.filterwarnings("ignore", message="The .*generic.* unit for NumPy timedelta is deprecated.*", category=DeprecationWarning, module="yfinance\\..*")
-DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if DB.turso_enabled else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); NEWS_PAUSE_ENABLED=False
+DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if DB.turso_enabled else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(database=DB); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); ACCOUNT_LOCK=threading.RLock(); CYCLE_LOCK=threading.Lock(); NEWS_PAUSE_ENABLED=False
 REGISTRY=None; SERVICE=None; TRADE_MONITOR=None; SCHEDULER=StrategyScheduler(); NEWS_GATE=NewsGate(NEWS, enabled=NEWS_PAUSE_ENABLED)
 LAST_SCANS={}
 LAST_PING_AT=None
@@ -92,8 +92,8 @@ def ensure_runtime():
     logger.info("Market data cache health | enabled=%s remote=%s reason=%s",health["enabled"],health["remote"],health["reason"])
     if not ACCOUNTS: init_state()
     if REGISTRY is None: REGISTRY=discover_strategies()
-    if SERVICE is None: SERVICE=StrategyService(registry=REGISTRY,provider=YahooProvider(database=DB),database=DB,accounts=ACCOUNTS,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader)
-    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol,priority=0),accounts=ACCOUNTS)
+    if SERVICE is None: SERVICE=StrategyService(registry=REGISTRY,provider=YahooProvider(database=DB),database=DB,accounts=ACCOUNTS,account_lock=ACCOUNT_LOCK,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader)
+    if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol,priority=0),accounts=ACCOUNTS,account_lock=ACCOUNT_LOCK)
     if REMINDERS is None and settings.telegram_bot_token and settings.telegram_chat_id: REMINDERS=ReminderService(DB)
     with LOCK:
         for st in REGISTRY.all():
@@ -169,7 +169,7 @@ def run_strategy_cycle(strategy_id,*,now_at=None,send=True,period="30d"):
             logger.exception("Failed to persist FAILED scan history | strategy=%s run_id=%s",strategy_id,run_id)
         with LOCK: LAST_SCANS[strategy_id].update(status="ERROR",at=current.isoformat(),**payload)
         raise
-    payload={"checked":len(results),"directional":sum(r.signal.is_directional for r in results),"sent":sum(r.sent for r in results),"errors":sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason=="TELEGRAM_FAILED" for r in results)}
+    payload={"checked":len(results),"directional":sum(r.signal.is_directional for r in results),"sent":sum(r.sent for r in results),"errors":sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason in {"TELEGRAM_FAILED","SENT_PERSISTENCE_FAILED","SENT_ACCOUNT_LIMIT_RACE"} for r in results)}
     payload["buy"]=sum(r.signal.direction=="BUY" for r in results); payload["sell"]=sum(r.signal.direction=="SELL" for r in results); payload["no_signal"]=sum(not r.signal.is_directional for r in results)
     status="PARTIAL" if payload["errors"] else "OK"
     reasons={reason:sum(r.reason==reason for r in results) for reason in sorted({r.reason for r in results})}
@@ -191,7 +191,7 @@ def run_strategy_cycle(strategy_id,*,now_at=None,send=True,period="30d"):
             checked=len(results),
             directional=sum(r.signal.is_directional for r in results),
             sent=sum(r.sent for r in results),
-            errors=sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason=="TELEGRAM_FAILED" for r in results),
+            errors=sum(r.reason.startswith("MARKET_DATA_ERROR") or r.reason in {"TELEGRAM_FAILED","SENT_PERSISTENCE_FAILED","SENT_ACCOUNT_LIMIT_RACE"} for r in results),
             reasons={reason:sum(r.reason==reason for r in results) for reason in sorted({r.reason for r in results})},
             elapsed_ms=round((time.monotonic()-started)*1000),
         )
@@ -199,12 +199,17 @@ def run_strategy_cycle(strategy_id,*,now_at=None,send=True,period="30d"):
     return results
 def run_all_cycles(*,now_at=None,send=True,period="30d",force=False):
     _require_runtime_leader()
-    ensure_runtime(); out=[]
-    current=now_at or now()
-    for st in REGISTRY.all():
-        if force or SCHEDULER.is_due(st,current):
-            out.extend(run_strategy_cycle(st.manifest.id,now_at=current,send=send,period=period))
-    return out
+    ensure_runtime()
+    # Scheduled scans and Telegram /scan requests share one cycle lock. A
+    # manual request waits for the current cycle instead of racing account,
+    # signal and provider state in another thread.
+    with CYCLE_LOCK:
+        out=[]
+        current=now_at or now()
+        for st in REGISTRY.all():
+            if force or SCHEDULER.is_due(st,current):
+                out.extend(run_strategy_cycle(st.manifest.id,now_at=current,send=send,period=period))
+        return out
 def scanner_loop():
     while not STOP.is_set():
         try:
@@ -237,8 +242,9 @@ def monitor_loop():
         except Exception: logger.exception("Monitor cycle failed")
         STOP.wait(settings.monitor_interval_seconds)
 def _backtest_payload(strategy,symbol,period):
+    _require_runtime_leader()
     ensure_runtime(); key=strategy.strip().lower(); st=REGISTRY.get(key); symbol=symbol.strip().upper()
-    if symbol not in st.manifest.assets: raise ValueError(f"{key} does not support {symbol}")
+    if symbol not in st.manifest.assets and key not in EXTRA_ASSET_STRATEGIES.get(symbol, ()): raise ValueError(f"{key} does not support {symbol}")
     frame=SERVICE.engine.fetch(st,symbol,period=period)
     # Backtests route on the same table as live dispatch, so a backtest of an
     # asset is charged to the account that would actually trade it.
@@ -267,7 +273,7 @@ def _backtest_payload(strategy,symbol,period):
     for trade in result.trades:
         equity += float(trade.pnl)
         equity_curve.append({"timestamp": trade.timestamp.isoformat(), "equity": round(equity, 2)})
-    return {"ok":True,"strategy":result.strategy,"strategy_id":st.manifest.id,"strategy_version":result.strategy_version,"symbol":symbol,"asset":BACKTEST_ASSETS[symbol],"period":period,"parameters":result.parameters,"candle_count":len(frame),"buy_signals":buy_signals,"sell_signals":sell_signals,"trades_taken":trades_taken,"planned_risk":planned_risk,"equity_curve":equity_curve,"metrics":{"return_pct":m.return_pct,"max_drawdown_pct":m.max_drawdown_pct,"sharpe":m.sharpe,"sortino":m.sortino,"win_rate_pct":m.win_rate_pct,"profit_factor":m.profit_factor,"number_of_trades":m.number_of_trades,"average_trade":m.average_trade,"max_losing_streak":m.max_losing_streak,"exposure_pct":m.exposure_pct,"risk_adjusted_performance":m.risk_adjusted_performance,"rating":m.rating,"rating_label":m.rating_label,"breakdown":m.breakdown},"daily":[{"date":d,**v} for d,v in sorted(daily.items())],"signals":signals,"trades":[{"timestamp":x.timestamp.isoformat(),"direction":x.direction,"entry":x.entry,"exit":x.exit,"pnl":x.pnl,"bars_held":x.bars_held} for x in result.trades][-200:],"generated_at":now().isoformat()}
+    return {"ok":True,"strategy":result.strategy,"strategy_id":st.manifest.id,"strategy_version":result.strategy_version,"symbol":symbol,"asset":LIVE_ASSET_MAP[symbol].label,"period":period,"parameters":result.parameters,"candle_count":len(frame),"buy_signals":buy_signals,"sell_signals":sell_signals,"trades_taken":trades_taken,"planned_risk":planned_risk,"equity_curve":equity_curve,"metrics":{"return_pct":m.return_pct,"max_drawdown_pct":m.max_drawdown_pct,"sharpe":m.sharpe,"sortino":m.sortino,"win_rate_pct":m.win_rate_pct,"profit_factor":m.profit_factor,"number_of_trades":m.number_of_trades,"average_trade":m.average_trade,"max_losing_streak":m.max_losing_streak,"exposure_pct":m.exposure_pct,"risk_adjusted_performance":m.risk_adjusted_performance,"rating":m.rating,"rating_label":m.rating_label,"breakdown":m.breakdown},"daily":[{"date":d,**v} for d,v in sorted(daily.items())],"signals":signals,"trades":[{"timestamp":x.timestamp.isoformat(),"direction":x.direction,"entry":x.entry,"exit":x.exit,"pnl":x.pnl,"bars_held":x.bars_held} for x in result.trades][-200:],"generated_at":now().isoformat()}
 def _scan_error_alert_state(strategy_ids, entries=None):
     """Persisted incident rows for the dashboard's scan diagnostics (no secrets).
 
@@ -403,6 +409,10 @@ def snapshot():
             _SNAPSHOT_CACHE["at"]=time.monotonic()
     return payload
 
+def _database_backend_label():
+    """Return the real production adapter, not the legacy Turso compatibility flag."""
+    return "SUPABASE_POSTGRES" if getattr(DB, "supabase_enabled", False) else "LOCAL_SQLITE"
+
 def _build_dashboard_payload(started):
     degraded=[]
     _dashboard_snapshot_stage("runtime_init",ensure_runtime)
@@ -448,7 +458,7 @@ def _build_dashboard_payload(started):
         trades=trades,
         scan={**scan,"history":scan_history},
         health={
-            "database":"TURSO" if DB.turso_enabled else "LOCAL_SQLITE",
+            "database":_database_backend_label(),
             "provider":"YAHOO",
             "telegram":"CONFIGURED" if settings.telegram_bot_token else "DISABLED",
             "telegram_failed_deliveries":len(failed_deliveries),
@@ -467,7 +477,7 @@ def _build_dashboard_payload(started):
 # Scan-level error alerts are edge-triggered and durable: an asset outage that
 # fails every sweep must not post one bubble per sweep, and a Render redeploy or
 # process restart must not forget an open incident. The incident record lives in
-# db.scan_error_alerts (Turso primary, local SQLite for development), keyed per strategy:
+# db.scan_error_alerts (Supabase Postgres primary, local SQLite for development), keyed per strategy:
 # the first scan with errors alerts; repeats with the same failing-asset set and
 # error classes stay silent (every sweep still logs full technical detail and
 # records a scan_runs row); a changed failure set alerts immediately; an
@@ -771,14 +781,13 @@ def _notifications_response(env,start):
     return _json_response(start,{"ok":True,"message":message,**channels.state()})
 def _sweep_diagnostic_payload(*, period="30d"):
     """Run the real Sweep V2 data -> prepare -> signal path without dispatching or sending."""
+    _require_runtime_leader()
     ensure_runtime()
     strategy = REGISTRY.get("sweep_v2")
     current = now()
     rows = []
     totals = {"assets": 0, "ok": 0, "errors": 0, "directional": 0, "reasons": {}}
-    for asset in live_assets():
-        if asset.symbol not in strategy.manifest.assets:
-            continue
+    for asset in assets_for_strategy(strategy.manifest.id):
         totals["assets"] += 1
         row = {"symbol": asset.symbol, "label": asset.label, "market": asset.market,
                "timeframe": asset.sweep_timeframe}
@@ -813,6 +822,7 @@ def _sweep_diagnostic_payload(*, period="30d"):
             "version": strategy.manifest.version}, "generated_at": current.isoformat(),
             "period": period, "totals": totals, "assets": rows}
 def _calendar_payload(query):
+    _require_runtime_leader()
     target=query.get("date",[None])[0]; impacts={x.strip().title() for x in query.get("impact",["All"])[0].split(",") if x.strip()} or {"All"}; return NEWS.get(target_date=target,impacts={"All"} if "All" in impacts else impacts,force=query.get("refresh")==["1"])
 def _hostname(value, *, authority=False):
     """Lowercased hostname from an Origin/Referer URL or a Host-style authority."""
@@ -845,8 +855,10 @@ def _same_origin_request(env):
 def _admin_token_allowed(env):
     """Require the configured deployment admin token using constant-time comparison."""
     expected=os.getenv("DASHBOARD_API_TOKEN","").strip()
-    # Keep local-first development compatible when no deployment token is set.
-    if not expected: return True
+    # Local development may omit the token. A deployed service (PORT is set
+    # by Render and other production hosts) must fail closed when it is absent.
+    if not expected:
+        return not bool(os.getenv("PORT", "").strip())
     supplied=str(env.get("HTTP_X_ADMIN_TOKEN","") or "").strip()
     if not supplied:
         authorization=str(env.get("HTTP_AUTHORIZATION","") or "")
@@ -864,7 +876,7 @@ def _admin_api_guard(env,start,*,require_token=True):
         return _json_response(start,{"ok":False,"error":"An admin token is required for this dashboard API. Send it as X-Admin-Token or Authorization: Bearer.","code":"ADMIN_TOKEN_REQUIRED"},"401 Unauthorized")
     return None
 def _config_endpoint_guard(env,start):
-    """Preserve configuration same-origin checks and protect reads and writes."""
+    """Protect configuration reads and writes; only the main dashboard is public."""
     return _admin_api_guard(env,start)
 def build_app():
     root=os.path.dirname(__file__); files={"/":("dashboard.html","text/html; charset=utf-8"),"/dashboard":("dashboard.html","text/html; charset=utf-8"),"/app.js":("app.js","application/javascript"),"/styles.css":("styles.css","text/css"),"/appearance.js":("appearance.js","application/javascript"),"/dashboard-live-wiring.js":("dashboard-live-wiring.js","application/javascript"),"/appearance-overrides.css":("appearance-overrides.css","text/css"),"/foundation.css":("foundation.css","text/css"),"/notifications.js":("notifications.js","application/javascript"),"/manifest.webmanifest":("manifest.webmanifest","application/manifest+json"),"/sw.js":("sw.js","application/javascript"),"/app-icon.svg":("app-icon.svg","image/svg+xml")}
@@ -894,7 +906,8 @@ def build_app():
                 logger.exception("Health check failed")
                 return _json_response(start,{"ok":False,"status":"DEGRADED","timestamp":now().isoformat()},"503 Service Unavailable")
         if path=="/api/dashboard":
-            guard=_admin_api_guard(env,start)
+            # Public read-only dashboard data; mutations remain separately guarded.
+            guard=_admin_api_guard(env,start,require_token=False)
             if guard is not None: return guard
             request_started=time.monotonic()
             try:
@@ -908,6 +921,8 @@ def build_app():
             guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             try:return _json_response(start,_sweep_diagnostic_payload(period=query.get("period",["30d"])[0]))
+            except RuntimeLeadershipError as exc:
+                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
             except Exception as exc:
                 logger.exception("Sweep diagnostics failed")
                 return _json_response(start,{"ok":False,"error_type":type(exc).__name__,"error":str(exc)},"500 Internal Server Error")
@@ -931,6 +946,7 @@ def build_app():
             guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             try:return _json_response(start,_calendar_payload(query))
+            except RuntimeLeadershipError as exc:return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
             except Exception as exc:return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request")
         if path=="/api/backtest":
             guard=_admin_api_guard(env,start)
@@ -943,6 +959,8 @@ def build_app():
                     query.get("symbol",[LIVE_SYMBOLS[0]])[0],
                     query.get("period",["30d"])[0],
                 ))
+            except RuntimeLeadershipError as exc:
+                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
             except Exception as exc:
                 logger.exception("Backtest request failed")
                 return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request")
@@ -1000,7 +1018,7 @@ def _handle_command(chat_id,cmd):
     try:
         if cmd in ("/start","/menu"): _send_chat(chat_id,msg_start())
         elif cmd=="/whatsnew": _send_chat(chat_id,msg_whats_new())
-        elif cmd in ("/check","/scan"): _send_chat(chat_id,msg_scan_started()); results=run_all_cycles(send=True,force=True); _send_chat(chat_id,msg_scan_result(sum(r.sent for r in results),sum(len(st.manifest.assets) for st in REGISTRY.all())))
+        elif cmd in ("/check","/scan"): _send_chat(chat_id,msg_scan_started()); results=run_all_cycles(send=True,force=True); _send_chat(chat_id,msg_scan_result(sum(r.sent for r in results),sum(len(assets_for_strategy(st.manifest.id)) for st in REGISTRY.all())))
         elif cmd=="/balance": _send_chat(chat_id,msg_balance(ACCOUNTS))
         elif cmd=="/summary": _send_chat(chat_id,msg_summary(DB.load_trades("OPEN"),DB.load_trades("CLOSED")))
         elif cmd=="/risk": _send_chat(chat_id,msg_risk(DB.load_trades("OPEN")))
@@ -1036,20 +1054,40 @@ def _telegram_api_call(token,method,payload=None,timeout=15):
     return body
 def _prepare_telegram_polling(token):
     _telegram_api_call(token,"deleteWebhook",{"drop_pending_updates":"false"}); me=_telegram_api_call(token,"getMe").get("result",{}); logger.info("Telegram polling ready: bot=@%s id=%s",me.get("username","unknown"),me.get("id","unknown"))
+def _process_telegram_update(update):
+    """Process one update before acknowledging its durable Telegram offset.
+
+    Pending updates are replayed after a crash; completed updates are skipped.
+    The single runtime lease ensures only one poller owns this state machine.
+    """
+    update_id = int(update["update_id"])
+    received_at = now().isoformat()
+    if not DB.claim_telegram_update(update_id, received_at):
+        return False
+    message = update.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    message_text = str(message.get("text", ""))
+    cmd = message_text.split()[0].split("@")[0].lower() if message_text else ""
+    if chat_id and str(chat_id) == str(settings.telegram_chat_id) and cmd:
+        # Run synchronously: acknowledging before the handler returns could
+        # lose a command if the process restarted mid-execution.
+        _handle_command(str(chat_id), cmd)
+    DB.complete_telegram_update(update_id, update_id + 1, now().isoformat())
+    return True
+
 def telegram_commands():
     token=settings.telegram_bot_token
     if not token:return
     try:_prepare_telegram_polling(token)
     except Exception as exc: logger.warning("Telegram polling initialization failed: %s",exc); STOP.wait(30)
-    offset=0; conflict_logged_at=0.0; conflict_backoff=30
+    conflict_logged_at=0.0; conflict_backoff=30
     while not STOP.is_set():
         try:
             _require_runtime_leader()
-            data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":offset},timeout=30)
+            data=_telegram_api_call(token,"getUpdates",{"timeout":20,"offset":DB.telegram_update_offset(),"allowed_updates":'["message"]'},timeout=30)
             conflict_backoff=30
-            for update in data.get("result",[]):
-                offset=int(update["update_id"])+1; message=update.get("message",{}); chat_id=message.get("chat",{}).get("id"); text=str(message.get("text","")); cmd=text.split()[0].split("@")[0].lower() if text else ""
-                if chat_id and str(chat_id)==str(settings.telegram_chat_id) and cmd: threading.Thread(target=_handle_command,args=(str(chat_id),cmd),daemon=True).start()
+            for update in sorted(data.get("result", []), key=lambda item: int(item["update_id"])):
+                _process_telegram_update(update)
         except RuntimeLeadershipError:
             logger.info("Telegram command poller exiting after leadership loss | pid=%s",os.getpid())
             break
@@ -1065,8 +1103,8 @@ def telegram_commands():
                 STOP.wait(5)
 def _telegram_command_polling_enabled():
     # Signal delivery uses sendMessage and does not require getUpdates polling.
-    # Polling is opt-in so another Telegram client cannot silently conflict with
-    # the scanner's primary signal-delivery runtime.
+    # Polling is enabled by default for the configured bot; set the environment
+    # variable to false when another consumer owns getUpdates.
     return os.getenv("TELEGRAM_COMMAND_POLLING", "true").strip().lower() in {"1","true","yes","on"}
 
 def _send_startup_announcement():

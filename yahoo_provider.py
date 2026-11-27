@@ -42,6 +42,24 @@ class YahooDataError(RuntimeError):
 logger = logging.getLogger(__name__)
 
 
+class _YFinanceRateLimitLogCapture(logging.Handler):
+    """Capture rate-limit diagnostics that yfinance logs instead of raising."""
+
+    _MARKERS = ("yfratelimiterror", "too many requests", "http error 429", "rate limit")
+
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.rate_limited = False
+
+    def emit(self, record):
+        try:
+            message = record.getMessage().lower()
+            if any(marker in message for marker in self._MARKERS):
+                self.rate_limited = True
+        except Exception:
+            pass
+
+
 class YahooProvider:
     """Rate-conscious Yahoo Finance provider with resilient caching."""
 
@@ -256,16 +274,19 @@ class YahooProvider:
             return None
 
     def _compatible_stale(self, key: tuple[str, str, str, bool]) -> Optional[pd.DataFrame]:
-        """Return recent data only from the same symbol and interval.
-
-        Period may differ because a larger history request can safely satisfy a
-        shorter lookback after the caller receives the frame. Intervals are never
-        mixed, preventing accidental 1d/30m/1h strategy input substitution.
-        """
+        """Return recent, same-symbol/interval stale data covering the requested window."""
+        start = self._period_start(key[1])
         now = time.monotonic()
         candidates: list[tuple[pd.DataFrame, float]] = []
         with self._lock:
             exact = self._last_success.get(key)
+            if start is None:
+                # An unrecognised period can only use an exact-key stale copy;
+                # another period cannot be proven to cover its history window.
+                if exact is None or now - exact[1] > YAHOO_STALE_GRACE_SECONDS:
+                    return None
+                frame = exact[0]
+                return frame.copy() if not frame.empty else None
             if exact is not None:
                 candidates.append(exact)
             for other_key, item in self._last_success.items():
@@ -274,9 +295,19 @@ class YahooProvider:
                 if other_key[0] == key[0] and other_key[2] == key[2] and other_key[3] == key[3]:
                     candidates.append(item)
         fresh = [(frame, saved) for frame, saved in candidates if now - saved <= YAHOO_STALE_GRACE_SECONDS]
-        if not fresh:
+        compatible = []
+        for frame, saved in fresh:
+            if frame.empty or not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+                continue
+            utc_index = frame.index.tz_convert("UTC")
+            if utc_index.min() > start:
+                continue
+            trimmed = frame.loc[utc_index >= start].copy()
+            if not trimmed.empty:
+                compatible.append((trimmed, saved))
+        if not compatible:
             return None
-        frame, _ = max(fresh, key=lambda item: item[1])
+        frame, _ = max(compatible, key=lambda item: item[1])
         logger.info(
             "Yahoo stale fallback | symbol=%s requested=%s compatible_cache=true",
             key[0], self._key_id(key),
@@ -485,6 +516,9 @@ class YahooProvider:
             # yfinance returns parsed DataFrames, not raw response bodies.
             # Count the request and report parsed-frame size as an estimate only.
             from bandwidth_metrics import record as record_bandwidth
+            rate_limit_capture = _YFinanceRateLimitLogCapture()
+            yfinance_logger = logging.getLogger("yfinance")
+            yfinance_logger.addHandler(rate_limit_capture)
             try:
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
@@ -530,6 +564,8 @@ class YahooProvider:
                     self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
                     return stale
                 raise YahooDataError(f"Yahoo request failed for {symbol}: {exc}") from exc
+            finally:
+                yfinance_logger.removeHandler(rate_limit_capture)
 
             # Empty responses are ambiguous: Yahoo also returns them for
             # unavailable symbols/periods (for example GC=F intraday history).
@@ -537,10 +573,11 @@ class YahooProvider:
             # Confirmed HTTP/YF rate-limit exceptions above still use provider-wide
             # backoff; an empty response receives only a per-symbol cooldown.
             if frame is None or frame.empty:
+                logged_rate_limit = rate_limit_capture.rate_limited
                 self._activate_backoff(
                     symbol,
-                    "empty_response",
-                    provider_wide=False,
+                    "logged_rate_limit_empty_response" if logged_rate_limit else "empty_response",
+                    provider_wide=logged_rate_limit,
                 )
                 stale = self._stale(key)
                 if stale is not None:

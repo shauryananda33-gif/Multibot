@@ -1,0 +1,7 @@
+# Runtime lock plus the resolver-selected test toolchain from Python 3.12/Linux CI.
+-r requirements.lock
+iniconfig==2.3.1
+packaging==26.4
+pluggy==1.7.0
+pygments==2.21.0
+pytest==9.2.0

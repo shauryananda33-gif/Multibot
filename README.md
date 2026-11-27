@@ -93,11 +93,10 @@ Create a folder:
 strategies/my_strategy/
 ├── __init__.py
 ├── strategy.py
-├── manifest.yaml
 └── tests/
 ```
 
-Implement the stable `Strategy` contract and expose `create_strategy()`.
+Implement the stable `Strategy` contract in Python and expose `create_strategy()`. The registry reads the `StrategyManifest` object in the plug-in; it does not load `manifest.yaml`.
 
 The loader automatically discovers strategy packages at startup.
 
@@ -125,8 +124,9 @@ The new strategy declares its own:
 - account
 - signal logic
 - initial exit policy
-- trailing policy
 - backtest support
+
+Trailing-stop execution is not currently implemented by the live monitor or backtester. Trend Pulse still declares trailing-stop metadata; it must not be interpreted as an active feature.
 
 See `STRATEGY_DEVELOPER_GUIDE.md` for the exact workflow.
 
@@ -138,6 +138,7 @@ See `STRATEGY_DEVELOPER_GUIDE.md` for the exact workflow.
 |---|---|---|---|
 | 🧠 Trend Pulse | BTC-USD, GC=F | 1D | Trend + momentum + breakout |
 | 🔎 Sweep 4H | 25-asset universe | Asset/schedule-defined | Liquidity sweep classification |
+| 🕯️ Engulf 66 SMA | Live asset universe | 1H | Engulfing entries around the 66 SMA |
 
 Strategies are identified by stable IDs such as `adaptive_trend` and `sweep_v2`, while human-readable names and versions are carried separately.
 
@@ -435,7 +436,7 @@ Health endpoint:
 Dashboard:
 
 ```text
-https://multibot-1d1fdf1c.appliedintelligencecorporation.com/dashboard
+https://multibot-3hsb.onrender.com/dashboard
 ```
 
 ---

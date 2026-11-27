@@ -1,17 +1,9 @@
 """Asset-aware optional economic-news gate."""
 from __future__ import annotations
+
+import re
 import pandas as pd
 
-ASSET_CURRENCIES = {
-    "BTC-USD": {"USD"},
-    "ETH-USD": {"USD"},
-    "GOLD": {"USD"},
-}
-DEFAULT_MARKET_CURRENCIES = {
-    "NSE": {"INR"},
-    "CRYPTO": {"USD"},
-    "COMMODITY": {"USD"},
-}
 
 class NewsGate:
     def __init__(self, news_service, enabled=False, window_minutes=30):
@@ -19,11 +11,23 @@ class NewsGate:
         self.enabled = enabled
         self.window_minutes = int(window_minutes)
 
-    def currencies_for(self, asset):
-        return ASSET_CURRENCIES.get(
-            asset.symbol,
-            DEFAULT_MARKET_CURRENCIES.get(getattr(asset, "market", ""), set()),
-        )
+    @staticmethod
+    def currencies_for(asset):
+        """Resolve event currencies from the canonical live asset definition."""
+        market = str(getattr(asset, "market", "") or "").strip().lower()
+        symbol = str(getattr(asset, "symbol", "") or "").strip().upper()
+        if market == "nse":
+            return {"INR"}
+        if market in {"gold", "crypto"}:
+            return {"USD"}
+        if market == "forex":
+            match = re.match(r"^([A-Z]{3})([A-Z]{3})=X$", symbol)
+            if match:
+                return {match.group(1), match.group(2)}
+            currency = str(getattr(asset, "currency", "") or "").upper()
+            return {currency} if currency else set()
+        currency = str(getattr(asset, "currency", "") or "").upper()
+        return {currency} if currency else set()
 
     def check(self, asset, now):
         if not self.enabled:

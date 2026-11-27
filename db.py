@@ -120,7 +120,7 @@ class DatabaseManager:
     _TABLES = (
         "accounts","trades","signals","signal_events","deliveries","scan_runs",
         "scan_error_alerts","market_data_cache","forex_calendar_week_cache","app_config",
-        "forex_calendar_attempts",
+        "forex_calendar_attempts","telegram_updates","telegram_poll_state",
     )
 
     def __init__(self,path=None):
@@ -163,6 +163,8 @@ CREATE TABLE IF NOT EXISTS forex_calendar_attempts(feed_key TEXT NOT NULL,week_s
 CREATE TABLE IF NOT EXISTS multibot_migrations(migration_key TEXT PRIMARY KEY,completed_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS app_config(config_key TEXT PRIMARY KEY,payload TEXT NOT NULL,updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS runtime_leases(lease_key TEXT PRIMARY KEY,owner_id TEXT NOT NULL,expires_at REAL NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS telegram_updates(update_id BIGINT PRIMARY KEY,status TEXT NOT NULL,received_at TEXT NOT NULL,completed_at TEXT);
+CREATE TABLE IF NOT EXISTS telegram_poll_state(singleton_id INTEGER PRIMARY KEY,next_offset BIGINT NOT NULL,updated_at TEXT NOT NULL);
 DELETE FROM signal_events WHERE rowid NOT IN (SELECT MAX(rowid) FROM signal_events GROUP BY signal_key);
 CREATE UNIQUE INDEX IF NOT EXISTS signal_events_key_uidx ON signal_events(signal_key);
 CREATE INDEX IF NOT EXISTS signal_events_timestamp_idx ON signal_events(timestamp DESC);
@@ -420,6 +422,144 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
             with self._connect() as c:
                 c.execute("INSERT INTO trades VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,payload=excluded.payload,updated_at=excluded.updated_at",(trade_id,status,encoded,updated_at))
         return self._retry_turso_operation(write,operation_name="save trade")
+    def open_trade_and_update_account(
+        self, trade_id, payload, updated_at, *, account_name, planned_risk,
+        reset_date, daily_trade_limit, max_daily_planned_risk,
+    ):
+        """Atomically create an OPEN trade and reserve its account risk.
+
+        Account counters are updated in SQL rather than from a process-local
+        snapshot, so simultaneous workers cannot overwrite one another's risk.
+        A failed trade insert rolls the account update back with the transaction.
+        """
+        encoded_payload = dict(payload)
+        encoded_payload["status"] = "OPEN"
+        encoded = json.dumps(encoded_payload, default=str)
+        risk = float(planned_risk)
+        def write():
+            with self._connect() as c:
+                existing = c.execute("SELECT status FROM trades WHERE id=?", (str(trade_id),)).fetchone()
+                if existing:
+                    row = c.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+                    return ("EXISTS", dict(row) if row else None)
+                changed = c.execute(
+                    """UPDATE accounts SET
+                         trades_today=CASE WHEN reset_date<>? THEN 1 ELSE trades_today+1 END,
+                         planned_risk_used=CASE WHEN reset_date<>? THEN ? ELSE planned_risk_used+? END,
+                         reset_date=?
+                       WHERE name=?
+                         AND (CASE WHEN reset_date<>? THEN 0 ELSE trades_today END) < ?
+                         AND (CASE WHEN reset_date<>? THEN 0 ELSE planned_risk_used END)+? <= ?""",
+                    (reset_date, reset_date, risk, risk, reset_date, account_name,
+                     reset_date, int(daily_trade_limit), reset_date, risk,
+                     float(max_daily_planned_risk)),
+                )
+                if changed.rowcount != 1:
+                    return ("LIMIT", None)
+                inserted = c.execute(
+                    "INSERT INTO trades(id,status,payload,updated_at) VALUES(?,?,?,?) ON CONFLICT(id) DO NOTHING",
+                    (str(trade_id), "OPEN", encoded, updated_at),
+                )
+                if inserted.rowcount != 1:
+                    raise DatabaseError(f"Trade {trade_id!r} was concurrently created; account reservation rolled back")
+                account = c.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+                if account is None:
+                    raise DatabaseError(f"Account {account_name!r} disappeared during trade creation")
+                return ("CREATED", dict(account))
+        return self._retry_turso_operation(write, operation_name="atomically open trade")
+
+    def close_trade_and_settle_account(
+        self, trade_id, payload, updated_at, *, account_name, pnl,
+        planned_risk, reset_date, reservation_date=None,
+    ):
+        """Atomically transition one OPEN trade and settle its account once."""
+        encoded_payload = dict(payload)
+        encoded_payload["status"] = "CLOSED"
+        encoded = json.dumps(encoded_payload, default=str)
+        realised = float(pnl)
+        risk = float(planned_risk)
+        reservation_date = str(reservation_date or reset_date)
+        def write():
+            with self._connect() as c:
+                changed = c.execute(
+                    "UPDATE trades SET status='CLOSED',payload=?,updated_at=? WHERE id=? AND status='OPEN'",
+                    (encoded, updated_at, str(trade_id)),
+                )
+                if changed.rowcount != 1:
+                    return (False, None)
+                account_update = c.execute(
+                    """UPDATE accounts SET balance=balance+?,
+                         trades_today=CASE WHEN reset_date<>? THEN 0 ELSE trades_today END,
+                         planned_risk_used=CASE
+                           WHEN reset_date<>? THEN 0
+                           WHEN ?=? THEN CASE WHEN planned_risk_used>? THEN planned_risk_used-? ELSE 0 END
+                           ELSE planned_risk_used END,
+                         reset_date=? WHERE name=?""",
+                    (realised, reset_date, reset_date, reservation_date, reset_date,
+                     risk, risk, reset_date, account_name),
+                )
+                if account_update.rowcount != 1:
+                    raise DatabaseError(f"Account {account_name!r} missing while settling trade {trade_id!r}")
+                account = c.execute("SELECT * FROM accounts WHERE name=?", (account_name,)).fetchone()
+                if account is None:
+                    raise DatabaseError(f"Account {account_name!r} disappeared during trade settlement")
+                return (True, dict(account))
+        return self._retry_turso_operation(write, operation_name="atomically close trade")
+
+    # --- durable Telegram polling -------------------------------------------
+    def telegram_update_offset(self):
+        """Return the next Telegram update_id offset confirmed as processed."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT next_offset FROM telegram_poll_state WHERE singleton_id=1"
+            ).fetchone()
+        return int(row["next_offset"]) if row else 0
+
+    def claim_telegram_update(self, update_id, received_at):
+        """Create/reopen a pending update; completed updates are never replayed."""
+        update_id = int(update_id)
+        def claim():
+            with self._connect() as connection:
+                connection.execute(
+                    """INSERT INTO telegram_updates(update_id,status,received_at,completed_at)
+                       VALUES(?, 'PENDING', ?, NULL)
+                       ON CONFLICT(update_id) DO NOTHING""",
+                    (update_id, received_at),
+                )
+                row = connection.execute(
+                    "SELECT status FROM telegram_updates WHERE update_id=?",
+                    (update_id,),
+                ).fetchone()
+                return bool(row and row["status"] != "COMPLETED")
+        return self._retry_turso_operation(claim, operation_name="claim Telegram update")
+
+    def complete_telegram_update(self, update_id, next_offset, completed_at):
+        """Mark an update complete and advance the poll offset in one transaction."""
+        update_id, next_offset = int(update_id), int(next_offset)
+        def complete():
+            with self._connect() as connection:
+                changed = connection.execute(
+                    """UPDATE telegram_updates SET status='COMPLETED', completed_at=?
+                       WHERE update_id=? AND status<>'COMPLETED'""",
+                    (completed_at, update_id),
+                )
+                if changed.rowcount == 0:
+                    row = connection.execute(
+                        "SELECT status FROM telegram_updates WHERE update_id=?",
+                        (update_id,),
+                    ).fetchone()
+                    if not row or row["status"] != "COMPLETED":
+                        raise DatabaseError(f"Telegram update {update_id} was not claimed")
+                connection.execute(
+                    """INSERT INTO telegram_poll_state(singleton_id,next_offset,updated_at)
+                       VALUES(1,?,?)
+                       ON CONFLICT(singleton_id) DO UPDATE SET
+                         next_offset=CASE WHEN telegram_poll_state.next_offset>excluded.next_offset THEN telegram_poll_state.next_offset ELSE excluded.next_offset END,
+                         updated_at=excluded.updated_at""",
+                    (next_offset, completed_at),
+                )
+        return self._retry_turso_operation(complete, operation_name="complete Telegram update")
+
     def _load_trades_with(self,c,status=None):
         rows=c.execute("SELECT payload FROM trades"+(" WHERE status=?" if status else "")+" ORDER BY updated_at DESC",(status,) if status else ()).fetchall()
         return [json.loads(x["payload"]) for x in rows]

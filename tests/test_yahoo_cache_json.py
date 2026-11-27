@@ -122,3 +122,94 @@ def test_provider_wide_backoff_survives_provider_recreation():
     replacement = yahoo_provider.YahooProvider(database=db)
     assert replacement.in_backoff("RELIANCE.NS")
     assert replacement._in_backoff("RELIANCE.NS") > 0
+
+
+
+def test_stale_compatible_cache_is_trimmed_to_requested_lookback():
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    index = pd.DatetimeIndex(
+        [now - pd.Timedelta(days=45), now - pd.Timedelta(days=20), now - pd.Timedelta(days=2)]
+    ).tz_convert("Asia/Kolkata")
+    frame = pd.DataFrame(
+        {"open": [1.0, 2.0, 3.0], "high": [1.0, 2.0, 3.0],
+         "low": [1.0, 2.0, 3.0], "close": [1.0, 2.0, 3.0]},
+        index=index,
+    )
+    provider._last_success[("BTC-USD", "60d", "1h", False)] = (frame, time.monotonic())
+
+    result = provider._compatible_stale(("BTC-USD", "30d", "1h", False))
+
+    assert result is not None
+    assert len(result) == 2
+    assert result.index.min().tz_convert("UTC") >= yahoo_provider.YahooProvider._period_start("30d")
+
+
+def test_stale_compatible_cache_rejects_insufficient_lookback():
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    index = pd.DatetimeIndex(
+        [now - pd.Timedelta(days=20), now - pd.Timedelta(days=2)]
+    ).tz_convert("Asia/Kolkata")
+    frame = pd.DataFrame(
+        {"open": [1.0, 2.0], "high": [1.0, 2.0],
+         "low": [1.0, 2.0], "close": [1.0, 2.0]},
+        index=index,
+    )
+    provider._last_success[("BTC-USD", "20d", "1h", False)] = (frame, time.monotonic())
+
+    assert provider._compatible_stale(("BTC-USD", "30d", "1h", False)) is None
+
+
+def test_logged_yahoo_rate_limit_empty_frame_triggers_provider_wide_backoff(monkeypatch):
+    import logging
+    import pytest
+
+    class FakeYFinance:
+        @staticmethod
+        def download(symbol, **kwargs):
+            logging.getLogger("yfinance").warning(
+                "YFRateLimitError: Too Many Requests"
+            )
+            return pd.DataFrame()
+
+    monkeypatch.setattr(yahoo_provider, "yf", FakeYFinance())
+    monkeypatch.setattr(
+        yahoo_provider.GLOBAL_YAHOO_COORDINATOR, "run",
+        lambda operation, priority=5: operation(),
+    )
+    activated = []
+    monkeypatch.setattr(
+        yahoo_provider.YahooProvider, "_activate_backoff",
+        lambda self, symbol, reason, *, provider_wide=False:
+            activated.append((symbol, reason, provider_wide)),
+    )
+
+    with pytest.raises(yahoo_provider.YahooDataError, match="no data"):
+        yahoo_provider.YahooProvider().fetch(
+            "GC=F", period="5d", interval="1h"
+        )
+
+    assert activated == [
+        ("GC=F", "logged_rate_limit_empty_response", True)
+    ]
+
+
+def test_unknown_stale_period_uses_only_an_exact_cache_key():
+    provider = yahoo_provider.YahooProvider()
+    now = pd.Timestamp.now(tz="UTC")
+    exact = pd.DataFrame(
+        {"open": [2.0], "high": [2.0], "low": [2.0], "close": [2.0]},
+        index=pd.DatetimeIndex([now]).tz_convert("Asia/Kolkata"),
+    )
+    other = pd.DataFrame(
+        {"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0]},
+        index=pd.DatetimeIndex([now - pd.Timedelta(days=100)]).tz_convert("Asia/Kolkata"),
+    )
+    provider._last_success[("BTC-USD", "max", "1h", False)] = (exact, time.monotonic())
+    provider._last_success[("BTC-USD", "5d", "1h", False)] = (other, time.monotonic())
+
+    result = provider._compatible_stale(("BTC-USD", "max", "1h", False))
+
+    assert result is not None
+    assert result["close"].iloc[0] == 2.0

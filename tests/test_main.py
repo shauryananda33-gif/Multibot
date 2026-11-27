@@ -84,34 +84,26 @@ def test_configuration_reads_stay_open_without_deployment_token(monkeypatch):
     assert status == "200 OK" and payload["ok"] is True
 
 
-def test_sensitive_dashboard_apis_require_token_when_configured(monkeypatch):
+def test_only_main_dashboard_read_api_is_public_when_admin_token_is_configured(monkeypatch):
     monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
-    protected = (
-        "/api/dashboard",
-        "/api/diagnostics/sweep",
-        "/api/calendar",
-        "/api/news",
-        "/api/backtest",
-        "/api/settings",
-        "/api/notifications",
-    )
+    # The shared dashboard snapshot is public and needs no browser token.
+    status, payload = _call("GET", "/api/dashboard")
+    assert status == "200 OK" and payload["ok"] is True
+
+    # Tools, diagnostics and configuration data remain private.
+    protected = ("/api/diagnostics/sweep", "/api/calendar", "/api/news",
+                 "/api/backtest", "/api/settings", "/api/notifications")
     for path in protected:
         status, payload = _call("GET", path)
-        assert status == "401 Unauthorized", (path, status)
+        assert status == "401 Unauthorized", (path, status, payload)
         assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
 
-        status, payload = _call("GET", path, token="wrong-token")
-        assert status == "401 Unauthorized", (path, status)
-        assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
-
+    # Configuration changes also remain private.
     for path in ("/api/settings", "/api/notifications"):
         status, payload = _call("POST", path, body=b"{}")
-        assert status == "401 Unauthorized", (path, status)
-        assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
+        assert status == "401 Unauthorized"
+        assert payload["code"] == "ADMIN_TOKEN_REQUIRED"
 
-    # Private dashboard data accepts a valid token.
-    status, payload = _call("GET", "/api/dashboard", token="sekret-token")
-    assert status == "200 OK" and payload["ok"] is True
     # Health remains public and exposes only status/keepalive, never deployment secrets.
     status, payload = _call("GET", "/api/health")
     assert status == "200 OK"
@@ -121,17 +113,6 @@ def test_sensitive_dashboard_apis_require_token_when_configured(monkeypatch):
     }
     assert payload["ok"] is True
     assert payload["status"] == "ONLINE"
-    # Secondary protected routes also proceed with the correct token; replace
-    # expensive/news-dependent handlers with deterministic test doubles.
-    monkeypatch.setattr(main, "_sweep_diagnostic_payload", lambda **kwargs: {"ok": True})
-    monkeypatch.setattr(main, "_calendar_payload", lambda query: {"ok": True})
-    monkeypatch.setattr(main, "_backtest_payload", lambda *args: {"ok": True})
-    for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
-        status, payload = _call("GET", path, token="sekret-token")
-        assert status == "200 OK" and payload["ok"] is True, (path, status, payload)
-    for path in ("/api/settings", "/api/notifications"):
-        status, payload = _call("GET", path, token="sekret-token")
-        assert status == "200 OK" and payload["ok"] is True, (path, status, payload)
 
 
 def test_ping_remains_public_with_deployment_token(monkeypatch):
@@ -184,7 +165,7 @@ def test_admin_token_gates_configuration_writes_and_reads(monkeypatch):
     status, _ = _call("POST", "/api/notifications", origin=origin,
                       authorization="Bearer sekret-token", body=b"{")
     assert status == "400 Bad Request"
-    # Protected configuration reads need the same token.
+    # Configuration reads and writes both remain protected.
     status, payload = _call("GET", "/api/settings", origin=origin)
     assert status == "401 Unauthorized" and payload["code"] == "ADMIN_TOKEN_REQUIRED"
     status, payload = _call("GET", "/api/settings", origin=origin, token="sekret-token")
@@ -332,3 +313,73 @@ def test_final_scan_history_failure_does_not_replay_completed_scan(monkeypatch):
     assert scan_calls == ["scan"]
     assert database.writes == 2
     assert main.LAST_SCANS["sweep_v2"]["status"] == "OK"
+
+
+def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
+    monkeypatch.setattr(main, "RUNTIME_LEASE_REQUIRED", True)
+    monkeypatch.setattr(main, "RUNTIME_LEADER", False)
+    monkeypatch.setattr(main, "RUNTIME_OWNER_ID", None)
+    monkeypatch.setattr(main, "ensure_runtime", lambda: None)
+    class _Registry:
+        @staticmethod
+        def ids():
+            return ["sweep_v2"]
+    monkeypatch.setattr(main, "REGISTRY", _Registry())
+
+    for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
+        status, payload = _call("GET", path, token="sekret-token")
+        assert status == "503 Service Unavailable", (path, status, payload)
+        assert "not the active" in payload["error"]
+
+
+def test_manual_and_scheduled_scan_cycles_are_serialized(monkeypatch):
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(main, "_require_runtime_leader", lambda: None)
+    monkeypatch.setattr(main, "ensure_runtime", lambda: None)
+    monkeypatch.setattr(
+        main, "REGISTRY",
+        SimpleNamespace(all=lambda: [SimpleNamespace(manifest=SimpleNamespace(id="probe"))]),
+    )
+    monkeypatch.setattr(main, "SCHEDULER", SimpleNamespace(is_due=lambda *args: True))
+    barrier = threading.Barrier(3)
+    state = {"active": 0, "maximum": 0}
+    state_lock = threading.Lock()
+
+    def fake_cycle(*args, **kwargs):
+        with state_lock:
+            state["active"] += 1
+            state["maximum"] = max(state["maximum"], state["active"])
+        time.sleep(0.05)
+        with state_lock:
+            state["active"] -= 1
+        return ["done"]
+
+    monkeypatch.setattr(main, "run_strategy_cycle", fake_cycle)
+
+    def run():
+        barrier.wait()
+        main.run_all_cycles(force=True)
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(timeout=2)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert state["maximum"] == 1
+
+
+def test_dashboard_reports_the_actual_supabase_database_backend(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(main, "DB", SimpleNamespace(supabase_enabled=True, turso_enabled=True))
+    assert main._database_backend_label() == "SUPABASE_POSTGRES"
+
+    monkeypatch.setattr(main, "DB", SimpleNamespace(supabase_enabled=False, turso_enabled=False))
+    assert main._database_backend_label() == "LOCAL_SQLITE"
