@@ -18,8 +18,6 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
-      - key: DASHBOARD_API_TOKEN
-        sync: false
       - key: DASHBOARD_URL
         value: https://multibot-3hsb.onrender.com/dashboard
       - key: ARCHITECTURE_URL

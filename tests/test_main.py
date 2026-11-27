@@ -75,101 +75,24 @@ def test_ping_contract_exists():
 
 # --- configuration endpoint protection ----------------------------------
 
-def test_configuration_reads_stay_open_without_deployment_token(monkeypatch):
-    """Local development remains compatible when the deployment token is unset."""
-    monkeypatch.delenv("DASHBOARD_API_TOKEN", raising=False)
-    status, payload = _call("GET", "/api/settings", origin="http://localhost:3000")
-    assert status == "200 OK" and payload["ok"] is True
-    status, payload = _call("GET", "/api/notifications")
-    assert status == "200 OK" and payload["ok"] is True
-
-
-def test_only_main_dashboard_read_api_is_public_when_admin_token_is_configured(monkeypatch):
-    monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
-    # The shared dashboard snapshot is public and needs no browser token.
-    status, payload = _call("GET", "/api/dashboard")
-    assert status == "200 OK" and payload["ok"] is True
-
-    # Tools, diagnostics and configuration data remain private.
-    protected = ("/api/diagnostics/sweep", "/api/calendar", "/api/news",
-                 "/api/backtest", "/api/settings", "/api/notifications")
-    for path in protected:
+def test_dashboard_read_apis_are_public_and_configuration_is_read_only():
+    for path in ("/api/dashboard", "/api/diagnostics/sweep", "/api/calendar",
+                 "/api/news", "/api/backtest", "/api/settings", "/api/notifications"):
         status, payload = _call("GET", path)
-        assert status == "401 Unauthorized", (path, status, payload)
-        assert payload["code"] == "ADMIN_TOKEN_REQUIRED", (path, payload)
-
-    # Configuration changes also remain private.
+        assert status == "200 OK", (path, status, payload)
+        assert payload is not None
     for path in ("/api/settings", "/api/notifications"):
         status, payload = _call("POST", path, body=b"{}")
-        assert status == "401 Unauthorized"
-        assert payload["code"] == "ADMIN_TOKEN_REQUIRED"
-
-    # Health remains public and exposes only status/keepalive, never deployment secrets.
-    status, payload = _call("GET", "/api/health")
-    assert status == "200 OK"
-    assert set(payload) == {
-        "ok", "status", "timestamp", "keepalive",
-        "last_ping_at", "keepalive_age_minutes",
-    }
-    assert payload["ok"] is True
-    assert payload["status"] == "ONLINE"
+        assert status == "403 Forbidden", (path, status, payload)
+        assert "disabled" in payload["error"].lower()
 
 
-def test_ping_remains_public_with_deployment_token(monkeypatch):
-    """The external keepalive endpoint exposes no trading data."""
-    monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
-    status, payload = _call("GET", "/ping")
-    assert status == "200 OK" and payload is None
-
-
-def test_private_api_rejects_cross_origin_before_authentication(monkeypatch):
-    monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
-    status, payload = _call("GET", "/api/dashboard", origin="https://evil.example")
-    assert status == "403 Forbidden" and payload["code"] == "CROSS_ORIGIN"
-
-
-def test_configuration_endpoints_reject_cross_origin_requests(monkeypatch):
-    monkeypatch.delenv("DASHBOARD_API_TOKEN", raising=False)
-    for path in ("/api/settings", "/api/notifications"):
-        for method, body in (("GET", b""), ("POST", b"{")):
-            status, payload = _call(method, path, origin="https://evil.example", body=body)
-            assert status == "403 Forbidden", (method, path, status)
-            assert payload["code"] == "CROSS_ORIGIN"
-
-
-def test_configuration_writes_are_open_by_default(monkeypatch):
-    """Local-first default: no token configured, same-origin writes proceed."""
-    monkeypatch.delenv("DASHBOARD_API_TOKEN", raising=False)
-    monkeypatch.setattr(main, "_settings_response",
-                        lambda env, start: main._json_response(start, {"ok": True}))
-    status, payload = _call("POST", "/api/settings",
-                            origin="http://localhost:3000", body=b"{}")
-    assert status == "200 OK" and payload["ok"] is True
-
-
-def test_admin_token_gates_configuration_writes_and_reads(monkeypatch):
-    monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
-    origin = "http://localhost:3000"
-    # Missing token -> 401 with a machine-readable code.
-    status, payload = _call("POST", "/api/settings", origin=origin, body=b"{")
-    assert status == "401 Unauthorized" and payload["code"] == "ADMIN_TOKEN_REQUIRED"
-    # Wrong token -> still refused.
-    status, payload = _call("POST", "/api/notifications", origin=origin,
-                            token="nope", body=b"{")
-    assert status == "401 Unauthorized" and payload["code"] == "ADMIN_TOKEN_REQUIRED"
-    # Correct token via X-Admin-Token -> the write proceeds (400 = bad JSON body).
-    status, _ = _call("POST", "/api/settings", origin=origin,
-                      token="sekret-token", body=b"{")
-    assert status == "400 Bad Request"
-    # Correct token via Authorization: Bearer -> writes reach the handler.
-    status, _ = _call("POST", "/api/notifications", origin=origin,
-                      authorization="Bearer sekret-token", body=b"{")
-    assert status == "400 Bad Request"
-    # Configuration reads and writes both remain protected.
-    status, payload = _call("GET", "/api/settings", origin=origin)
-    assert status == "401 Unauthorized" and payload["code"] == "ADMIN_TOKEN_REQUIRED"
-    status, payload = _call("GET", "/api/settings", origin=origin, token="sekret-token")
-    assert status == "200 OK"
+def test_public_dashboard_apis_reject_cross_origin_requests():
+    for path in ("/api/dashboard", "/api/calendar", "/api/news",
+                 "/api/backtest", "/api/settings", "/api/notifications"):
+        status, payload = _call("GET", path, origin="https://evil.example")
+        assert status == "403 Forbidden", (path, status, payload)
+        assert payload["code"] == "CROSS_ORIGIN"
 
 
 # --- scan error alert dedup ----------------------------------------------
@@ -243,17 +166,13 @@ def test_scan_error_alert_is_bounded_by_a_repeat_window():
     assert main.scan_error_alert_decision(rearmed, fingerprint, now=after) == "suppress"
 
 
-def test_origin_check_honours_forwarded_host_behind_a_proxy(monkeypatch):
-    """A public Origin must match X-Forwarded-Host, not the internal Host."""
-    monkeypatch.delenv("DASHBOARD_API_TOKEN", raising=False)
+def test_origin_check_honours_forwarded_host_behind_a_proxy():
     status, payload = _call("POST", "/api/settings", origin="https://app.example",
-                            host="internal:8080", forwarded="app.example", body=b"{")
-    assert status == "400 Bad Request"  # same-origin as the browser sees it
-    # Without the forwarded header the same request is cross-origin.
+                            host="internal:8080", forwarded="app.example", body=b"{}")
+    assert status == "403 Forbidden" and "disabled" in payload["error"].lower()
     status, payload = _call("POST", "/api/settings", origin="https://app.example",
-                            host="internal:8080", body=b"{")
+                            host="internal:8080", body=b"{}")
     assert status == "403 Forbidden" and payload["code"] == "CROSS_ORIGIN"
-
 
 def test_initial_scan_history_failure_prevents_live_scan(monkeypatch):
     from types import SimpleNamespace

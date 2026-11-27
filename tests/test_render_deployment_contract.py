@@ -20,7 +20,6 @@ def test_render_blueprint_matches_the_live_single_web_service():
     assert "https://multibot-3hsb.onrender.com/dashboard" in config
     assert "https://multibot-3hsb.onrender.com/architecture" in config
     assert "SUPABASE_DB_URL" in config
-    assert "DASHBOARD_API_TOKEN" in config
 
 
 def test_netlify_proxy_configuration_is_not_shipped():
@@ -57,13 +56,12 @@ def test_dashboard_assets_are_served_by_the_python_app():
             assert expected in body
 
 
-def test_admin_api_fails_closed_on_deployment_without_token(monkeypatch):
-    monkeypatch.delenv("DASHBOARD_API_TOKEN", raising=False)
-    monkeypatch.setenv("PORT", "10000")
-    assert main._admin_token_allowed({}) is False
-
-
-def test_admin_api_keeps_local_development_compatible_without_token(monkeypatch):
-    monkeypatch.delenv("DASHBOARD_API_TOKEN", raising=False)
-    monkeypatch.delenv("PORT", raising=False)
-    assert main._admin_token_allowed({}) is True
+def test_dashboard_has_no_admin_token_gate():
+    source = (ROOT / "main.py").read_text()
+    frontend = (ROOT / "app.js").read_text()
+    notifications = (ROOT / "notifications.js").read_text()
+    render = (ROOT / "render.yaml").read_text()
+    for text in (source, frontend, notifications, render):
+        assert "DASHBOARD_API_TOKEN" not in text
+        assert "ADMIN_TOKEN_REQUIRED" not in text
+        assert "X-Admin-Token" not in text
