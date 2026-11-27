@@ -4,8 +4,7 @@ import json
 import main
 
 
-def _call(method, path, *, origin=None, host="localhost:3000", forwarded=None,
-          token=None, authorization=None, body=b""):
+def _call(method, path, *, origin=None, host="localhost:3000", forwarded=None, body=b""):
     """Drive the real WSGI app with a crafted request."""
     app = main.build_app()
     env = {
@@ -18,10 +17,6 @@ def _call(method, path, *, origin=None, host="localhost:3000", forwarded=None,
         env["HTTP_ORIGIN"] = origin
     if forwarded is not None:
         env["HTTP_X_FORWARDED_HOST"] = forwarded
-    if token is not None:
-        env["HTTP_X_ADMIN_TOKEN"] = token
-    if authorization is not None:
-        env["HTTP_AUTHORIZATION"] = authorization
     captured = {}
     chunks = app(env, lambda status, headers: captured.__setitem__("status", status))
     raw = b"".join(chunks)
@@ -235,7 +230,6 @@ def test_final_scan_history_failure_does_not_replay_completed_scan(monkeypatch):
 
 
 def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
-    monkeypatch.setenv("DASHBOARD_API_TOKEN", "sekret-token")
     monkeypatch.setattr(main, "RUNTIME_LEASE_REQUIRED", True)
     monkeypatch.setattr(main, "RUNTIME_LEADER", False)
     monkeypatch.setattr(main, "RUNTIME_OWNER_ID", None)
@@ -247,7 +241,7 @@ def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
     monkeypatch.setattr(main, "REGISTRY", _Registry())
 
     for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
-        status, payload = _call("GET", path, token="sekret-token")
+        status, payload = _call("GET", path)
         assert status == "503 Service Unavailable", (path, status, payload)
         assert "not the active" in payload["error"]
 
