@@ -655,7 +655,7 @@ async function postSettings(body,button){
   const model=state.settings;if(!model)return;
   setSettingsActionsBusy(true);settingsStatus("Saving to the server…","loading");
   try{
-    const response=await publicFetch"/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),cache:"no-store"});
+    const response=await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),cache:"no-store"});
     const result=await readJsonResponse(response,"Settings API");
     if(result.ok===false)throw new Error(result.error||"Settings change failed");
     state.settingsDirty=false;
