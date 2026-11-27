@@ -852,31 +852,14 @@ def _same_origin_request(env):
         referrer_host=_hostname(referer)
         if referrer_host: return bool(host) and referrer_host==host
     return True
-def _admin_token_allowed(env):
-    """Require the configured deployment admin token using constant-time comparison."""
-    expected=os.getenv("DASHBOARD_API_TOKEN","").strip()
-    # Local development may omit the token. A deployed service (PORT is set
-    # by Render and other production hosts) must fail closed when it is absent.
-    if not expected:
-        return not bool(os.getenv("PORT", "").strip())
-    supplied=str(env.get("HTTP_X_ADMIN_TOKEN","") or "").strip()
-    if not supplied:
-        authorization=str(env.get("HTTP_AUTHORIZATION","") or "")
-        if authorization[:7].lower()=="bearer ": supplied=authorization[7:].strip()
-    return bool(supplied) and hmac.compare_digest(supplied,expected)
-def _admin_write_allowed(env):
-    """Compatibility alias for the existing configuration-write gate."""
-    return _admin_token_allowed(env)
-def _admin_api_guard(env,start,*,require_token=True):
-    """Reject cross-origin requests and optionally require the deployment token."""
+def _admin_api_guard(env,start,*,require_token=False):
+    """Allow public dashboard reads while retaining same-origin API protection."""
     if not _same_origin_request(env):
         logger.info("API request rejected | reason=CROSS_ORIGIN origin=%s host=%s",env.get("HTTP_ORIGIN") or env.get("HTTP_REFERER"),env.get("HTTP_HOST"))
         return _json_response(start,{"ok":False,"error":"Cross-origin requests to the dashboard API are not allowed.","code":"CROSS_ORIGIN"},"403 Forbidden")
-    if require_token and not _admin_token_allowed(env):
-        return _json_response(start,{"ok":False,"error":"An admin token is required for this dashboard API. Send it as X-Admin-Token or Authorization: Bearer.","code":"ADMIN_TOKEN_REQUIRED"},"401 Unauthorized")
     return None
 def _config_endpoint_guard(env,start):
-    """Protect configuration reads and writes; only the main dashboard is public."""
+    """Apply same-origin protection to public read-only configuration views."""
     return _admin_api_guard(env,start)
 def build_app():
     root=os.path.dirname(__file__); files={"/":("dashboard.html","text/html; charset=utf-8"),"/dashboard":("dashboard.html","text/html; charset=utf-8"),"/app.js":("app.js","application/javascript"),"/styles.css":("styles.css","text/css"),"/appearance.js":("appearance.js","application/javascript"),"/dashboard-live-wiring.js":("dashboard-live-wiring.js","application/javascript"),"/appearance-overrides.css":("appearance-overrides.css","text/css"),"/foundation.css":("foundation.css","text/css"),"/notifications.js":("notifications.js","application/javascript"),"/manifest.webmanifest":("manifest.webmanifest","application/manifest+json"),"/sw.js":("sw.js","application/javascript"),"/app-icon.svg":("app-icon.svg","image/svg+xml")}
@@ -929,6 +912,8 @@ def build_app():
         if path=="/api/settings":
             guard=_config_endpoint_guard(env,start)
             if guard is not None: return guard
+            if env.get("REQUEST_METHOD","GET").upper()!="GET":
+                return _json_response(start,{"ok":False,"error":"Settings editing is disabled on this public dashboard."},"403 Forbidden")
             try:
                 return _settings_response(env,start)
             except Exception as exc:
@@ -937,6 +922,8 @@ def build_app():
         if path=="/api/notifications":
             guard=_config_endpoint_guard(env,start)
             if guard is not None: return guard
+            if env.get("REQUEST_METHOD","GET").upper()!="GET":
+                return _json_response(start,{"ok":False,"error":"Notification editing is disabled on this public dashboard."},"403 Forbidden")
             try:
                 return _notifications_response(env,start)
             except Exception as exc:
