@@ -188,7 +188,7 @@
     $$("[data-notifications-save],[data-notifications-reset]").forEach((el) => { el.disabled = true; });
     setStatus("Saving to the server…", "loading");
     try {
-      const response = await adminFetch("/api/notifications", {
+      const response = await fetch("/api/notifications", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body), cache: "no-store",
       });
@@ -208,16 +208,9 @@
 
   async function load() {
     if (loading || dirty) return;
-    // Public dashboard visitors must not be prompted just because the
-    // notifications card bootstraps in the background. Only fetch this
-    // protected admin resource when this browser already has an admin token.
-    if (typeof readStoredAdminToken === "function" && !readStoredAdminToken()) {
-      setStatus("Admin access required to manage notification channels. Public dashboard viewing does not require a token.", "error");
-      return;
-    }
     loading = true;
     try {
-      const response = await adminFetch("/api/notifications", { cache: "no-store" });
+      const response = await fetch("/api/notifications", { cache: "no-store" });
       apply(await readJsonResponse(response, "Notification API"));
       setStatus(model.options.telegram_configured ? "Saved · Telegram token present" : "Saved · Telegram token not set", "info");
     } catch (error) {

@@ -394,5 +394,5 @@ def test_dashboard_polling_uses_etag_instead_of_unique_cache_busting_urls():
     assert "let dashboardEtag=null" in APP
     assert 'headers=dashboardEtag?{"If-None-Match":dashboardEtag}:{}' in APP
     assert 'response.status===304' in APP
-    assert "adminFetch(CONFIG.apiUrl,{cache:\"no-store\",headers})" in APP
+    assert "fetch(CONFIG.apiUrl,{cache:\"no-store\",headers})" in APP
     assert "${CONFIG.apiUrl}?t=${Date.now()}" not in APP
