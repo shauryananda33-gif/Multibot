@@ -1,6 +1,6 @@
 """MULTIBOT2 runtime: registry-driven strategies, one shared trade lifecycle."""
 from __future__ import annotations
-import errno, hashlib, hmac, json, logging, os, signal as os_signal, threading, time, uuid, warnings
+import errno, gzip, hashlib, hmac, json, logging, os, signal as os_signal, threading, time, uuid, warnings
 from urllib import parse, request
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer, make_server
@@ -26,20 +26,20 @@ from yahoo_provider import YahooProvider
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger=logging.getLogger("multibot2")
 warnings.filterwarnings("ignore", message="The .*generic.* unit for NumPy timedelta is deprecated.*", category=DeprecationWarning, module="yfinance\\..*")
-DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if DB.turso_enabled else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(database=DB); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); ACCOUNT_LOCK=threading.RLock(); CYCLE_LOCK=threading.Lock(); NEWS_PAUSE_ENABLED=False
+DB=DatabaseManager(settings.db_path); _CONFIG_DB=DB if getattr(DB,"supabase_enabled",False) else None; bot_settings.configure_database(_CONFIG_DB); channels.configure_database(_CONFIG_DB); NEWS=NewsService(database=DB); ACCOUNTS={}; REMINDERS=None; STOP=threading.Event(); LOCK=threading.RLock(); ACCOUNT_LOCK=threading.RLock(); CYCLE_LOCK=threading.Lock(); NEWS_PAUSE_ENABLED=False
 REGISTRY=None; SERVICE=None; TRADE_MONITOR=None; SCHEDULER=StrategyScheduler(); NEWS_GATE=NewsGate(NEWS, enabled=NEWS_PAUSE_ENABLED)
 LAST_SCANS={}
 LAST_PING_AT=None
 SETTINGS_LOADED=False
 # A Turso-backed lease elects exactly one active worker across overlapping
 # deployment containers. Other instances may serve the dashboard in standby.
-RUNTIME_LEASE_TTL_SECONDS=60
-RUNTIME_LEASE_HEARTBEAT_SECONDS=15
+RUNTIME_LEASE_TTL_SECONDS=90
+RUNTIME_LEASE_HEARTBEAT_SECONDS=30
 RUNTIME_OWNER_ID=None
 RUNTIME_LEADER=False
 RUNTIME_LEASE_REQUIRED=False
 RUNTIME_LEASE_LAST_VERIFIED=0.0
-RUNTIME_LEASE_VERIFY_INTERVAL_SECONDS=5.0
+RUNTIME_LEASE_VERIFY_INTERVAL_SECONDS=15.0
 RUNTIME_LEASE_VERIFY_LOCK=threading.Lock()
 # A brief DNS/connect failure must not shut trading down. The deferral is a
 # wall-clock window, not a call budget: one scan calls the guard once per asset,
@@ -92,7 +92,14 @@ def ensure_runtime():
     logger.info("Market data cache health | enabled=%s remote=%s reason=%s",health["enabled"],health["remote"],health["reason"])
     if not ACCOUNTS: init_state()
     if REGISTRY is None: REGISTRY=discover_strategies()
-    if SERVICE is None: SERVICE=StrategyService(registry=REGISTRY,provider=YahooProvider(database=DB),database=DB,accounts=ACCOUNTS,account_lock=ACCOUNT_LOCK,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader)
+    if SERVICE is None:
+        candle_csv_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)),"data","candles")
+        candle_cache_dir=os.getenv("BOT_CANDLE_CACHE_DIR") or "/tmp/multibot_candles"
+        SERVICE=StrategyService(
+            registry=REGISTRY,
+            provider=YahooProvider(database=DB,persist_cache=False,csv_dir=candle_csv_dir,local_cache_dir=candle_cache_dir),
+            database=DB,accounts=ACCOUNTS,account_lock=ACCOUNT_LOCK,news_gate=NEWS_GATE,runtime_guard=_require_runtime_leader,
+        )
     if TRADE_MONITOR is None: TRADE_MONITOR=TradeMonitor(database=DB,price_lookup=lambda symbol: SERVICE.current_price(symbol,priority=0),accounts=ACCOUNTS,account_lock=ACCOUNT_LOCK)
     if REMINDERS is None and settings.telegram_bot_token and settings.telegram_chat_id: REMINDERS=ReminderService(DB)
     with LOCK:
@@ -196,6 +203,7 @@ def run_strategy_cycle(strategy_id,*,now_at=None,send=True,period="30d"):
             elapsed_ms=round((time.monotonic()-started)*1000),
         )
     _notify_scan(run_id,strategy_id,payload,results)
+    invalidate_dashboard_cache()
     return results
 def run_all_cycles(*,now_at=None,send=True,period="30d",force=False):
     _require_runtime_leader()
@@ -235,12 +243,19 @@ def monitor_once():
     ensure_runtime(); return TRADE_MONITOR.monitor_once(now=now())
 def monitor_loop():
     while not STOP.is_set():
-        try: monitor_once()
+        wait_seconds=settings.monitor_interval_seconds
+        try:
+            result=monitor_once()
+            if isinstance(result,dict):
+                if result.get("closed"):
+                    invalidate_dashboard_cache()
+                if int(result.get("active_trades") or 0)==0:
+                    wait_seconds=max(settings.monitor_interval_seconds,120)
         except RuntimeLeadershipError:
             logger.info("Trade monitor worker exiting after leadership loss | pid=%s",os.getpid())
             break
         except Exception: logger.exception("Monitor cycle failed")
-        STOP.wait(settings.monitor_interval_seconds)
+        STOP.wait(wait_seconds)
 def _backtest_payload(strategy,symbol,period):
     _require_runtime_leader()
     ensure_runtime(); key=strategy.strip().lower(); st=REGISTRY.get(key); symbol=symbol.strip().upper()
@@ -372,18 +387,19 @@ def _dashboard_snapshot_stage(name,operation,*,fallback=_SNAPSHOT_NO_FALLBACK,de
         logger.info("Dashboard snapshot stage complete | stage=%s | elapsed_ms=%s",name,round((time.monotonic()-started)*1000))
         return result
 
-# The dashboard's default snapshot shows the most recent 500 signals; the
-# read is one query on the shared dashboard connection.
-SIGNAL_HISTORY_LIMIT=500
-# The page refreshes every 30s, so a snapshot younger than this is served from
-# memory instead of rebuilding and paying another Turso handshake per request.
-# The TTL clears the poll interval with margin, so a page refresh is a cache hit
-# (an entry is already 30s old when the next refresh arrives) while a long-idle
-# tab still rebuilds. Scan cycles run every few minutes, so this staleness is
-# invisible on the dashboard.
-SNAPSHOT_CACHE_TTL_SECONDS=35.0
+# The dashboard's default snapshot shows the most recent 150 signals in one
+# query to keep Supabase Postgres and Render egress bounded.
+SIGNAL_HISTORY_LIMIT=150
+# Keep snapshots cached for 3 minutes when idle; scans and trade closes call
+# invalidate_dashboard_cache() so live updates surface on the next poll.
+SNAPSHOT_CACHE_TTL_SECONDS=180.0
 _SNAPSHOT_CACHE={"payload":None,"at":0.0}
 _SNAPSHOT_CACHE_LOCK=threading.Lock()
+
+def invalidate_dashboard_cache():
+    with _SNAPSHOT_CACHE_LOCK:
+        _SNAPSHOT_CACHE["payload"]=None
+        _SNAPSHOT_CACHE["at"]=0.0
 
 def _account_fallback():
     """Last-resort account state when the durable read is unavailable."""
@@ -426,7 +442,7 @@ def _build_dashboard_payload(started):
         "dashboard_reads",
         lambda:DB.dashboard_reads(
             names=names,starting_balance=ACCOUNT_SIZES,today=today,
-            signal_limit=SIGNAL_HISTORY_LIMIT,strategy_ids=strategy_ids,
+            signal_limit=SIGNAL_HISTORY_LIMIT,scan_limit=30,strategy_ids=strategy_ids,
         ),
         fallback=None,
         degraded=degraded,
@@ -539,6 +555,18 @@ def _scan_error_entries(results):
         asset = LIVE_ASSET_MAP.get(symbol.strip().upper())
         label = asset.label if asset is not None else symbol
         is_market = reason.startswith("MARKET_DATA_ERROR")
+        if is_market:
+            heading = "MARKET DATA ERROR"
+            short_reason = _short_market_reason(detail)
+        elif reason == "SENT_PERSISTENCE_FAILED":
+            heading = "PERSISTENCE ERROR"
+            short_reason = "trade persistence failed after send"
+        elif reason == "SENT_ACCOUNT_LIMIT_RACE":
+            heading = "ACCOUNT LIMIT RACE"
+            short_reason = "account limit reached after send"
+        else:
+            heading = "DELIVERY ERROR"
+            short_reason = "telegram delivery failed"
         detail = diagnostics.get("error") or reason.split(":", 1)[-1].strip() or reason
         candle = None
         failing = diagnostics.get("failing_candle")
@@ -551,10 +579,10 @@ def _scan_error_entries(results):
             except Exception:
                 candle = str(failing)
         entries.append({
-            "heading": "MARKET DATA ERROR" if is_market else "DELIVERY ERROR",
+            "heading": heading,
             "asset": label,
             "symbol": symbol,
-            "reason": _short_market_reason(detail) if is_market else "telegram delivery failed",
+            "reason": short_reason,
             "candle": candle,
         })
     return entries
@@ -578,7 +606,7 @@ def _notify_scan(run_id,strategy_id,payload,results,*,at=None):
     if SERVICE is None: return
     try:
         if payload.get("errors"):
-            error_results=[r for r in results if getattr(r,"reason","").startswith("MARKET_DATA_ERROR") or getattr(r,"reason","")=="TELEGRAM_FAILED"]
+            error_results=[r for r in results if getattr(r,"reason","").startswith("MARKET_DATA_ERROR") or getattr(r,"reason","") in {"TELEGRAM_FAILED","SENT_PERSISTENCE_FAILED","SENT_ACCOUNT_LIMIT_RACE"}]
             categories=sorted({r.reason.split(":")[0].strip() for r in error_results})
             symbols=sorted({r.symbol for r in error_results})
             fingerprint="|".join(categories+["@"]+symbols)
@@ -687,98 +715,37 @@ def summary_loop():
         except Exception: logger.exception("Summary cycle failed")
         STOP.wait(60)
 
-def _json_response(start,payload,status="200 OK"):
-    body=json.dumps(payload,default=str,separators=(",",":")).encode()
-    start(status,[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store"),("Content-Length",str(len(body)))])
+def _send_compressed(env,start,status,headers,body):
+    out_headers=list(headers)
+    if env is not None and len(body)>=512 and "gzip" in str(env.get("HTTP_ACCEPT_ENCODING","")).lower():
+        body=gzip.compress(body,compresslevel=6)
+        out_headers.extend([("Content-Encoding","gzip"),("Vary","Accept-Encoding")])
+    out_headers.append(("Content-Length",str(len(body))))
+    start(status,out_headers)
     return [body]
+
+def _json_response(start,payload,status="200 OK",*,env=None):
+    body=json.dumps(payload,default=str,separators=(",",":")).encode()
+    return _send_compressed(env,start,status,[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store")],body)
 
 def _dashboard_json_response(env,start,payload):
     """Send a conditional dashboard snapshot; unchanged polls transfer no JSON body."""
     body=json.dumps(payload,default=str,separators=(",",":")).encode()
-    etag='"'+hashlib.sha256(body).hexdigest()+'"'
+    # Ignore generated_at in ETag so idle TTL rebuilds still return 304 Not Modified.
+    etag_source=json.dumps({k:v for k,v in payload.items() if k!="generated_at"},default=str,separators=(",",":")).encode() if isinstance(payload,dict) else body
+    etag='"'+hashlib.sha256(etag_source).hexdigest()+'"'
     supplied={value.strip() for value in str(env.get("HTTP_IF_NONE_MATCH","")).split(",") if value.strip()}
     headers=[("Cache-Control","no-store"),("ETag",etag)]
     if etag in supplied or "*" in supplied:
         start("304 Not Modified",headers)
         return []
-    start("200 OK",[("Content-Type","application/json; charset=utf-8")]+headers+[("Content-Length",str(len(body)))])
-    return [body]
+    return _send_compressed(env,start,"200 OK",[("Content-Type","application/json; charset=utf-8")]+headers,body)
 def _settings_response(env,start):
-    """GET/POST /api/settings - read or replace accounts, assets and routing.
-
-    These values decide which account takes a real trade and on how much
-    capital, so they are written on the server: an unsaved edit is never
-    applied, and a rejected one leaves the running configuration untouched.
-    """
-    method=env.get("REQUEST_METHOD","GET").upper()
-    if method=="GET":
-        return _json_response(start,{"ok":True,"settings":bot_settings.settings_state(),"defaults":bot_settings.default_settings()})
-    if method!="POST":
-        start("405 Method Not Allowed",[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store"),("Allow","GET, POST")])
-        return [b'{"ok":false,"error":"Use POST to change bot settings."}']
-    try:
-        length=int(env.get("CONTENT_LENGTH") or 0)
-    except ValueError:
-        length=0
-    raw=env["wsgi.input"].read(length) if length>0 else b""
-    try:
-        payload=json.loads(raw or b"{}")
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return _json_response(start,{"ok":False,"error":"Malformed JSON body."},"400 Bad Request")
-    if not isinstance(payload,dict):
-        return _json_response(start,{"ok":False,"error":"Settings must be an object."},"400 Bad Request")
-    body=payload.get("settings")
-    document=body if body is not None else payload
-    try:
-        if document.get("action")=="reset":
-            state=bot_settings.reset(); message="Settings restored to the built-in defaults."
-        else:
-            state=bot_settings.save(document)
-            message="Settings saved and applied to the running bot."
-    except ValueError as exc:
-        # A rejected edit must not disturb the configuration already in force.
-        logger.info("Settings change rejected | error=%s",exc)
-        return _json_response(start,{"ok":False,"error":str(exc),"settings":bot_settings.settings_state()},"400 Bad Request")
-    logger.info("Settings change applied | %s",message)
-    # Accounts and assets are runtime state now: the scan loops, the monitor and
-    # the dashboard all hold their own account maps built once at startup.
-    init_state(); refresh_runtime_accounts()
-    return _json_response(start,{"ok":True,"settings":bot_settings.settings_state(),"message":message})
+    """GET /api/settings - read-only accounts, assets and routing snapshot."""
+    return _json_response(start,{"ok":True,"settings":bot_settings.settings_state(),"defaults":bot_settings.default_settings()})
 def _notifications_response(env,start):
-    """GET/POST /api/notifications - read or replace the delivery channels.
-
-    Webhook targets are credentials (a Discord/Slack webhook URL *is* the token),
-    so a read never returns one: the dashboard gets `has_target`/`has_secret`
-    plus a blank, and posting a blank back keeps whatever is stored. Telegram
-    keeps working with no channel saved at all.
-    """
-    method=env.get("REQUEST_METHOD","GET").upper()
-    if method=="GET":
-        return _json_response(start,{"ok":True,**channels.state()})
-    if method!="POST":
-        start("405 Method Not Allowed",[("Content-Type","application/json; charset=utf-8"),("Cache-Control","no-store"),("Allow","GET, POST")])
-        return [b'{"ok":false,"error":"Use POST to change notification channels."}']
-    try:
-        length=int(env.get("CONTENT_LENGTH") or 0)
-    except ValueError:
-        length=0
-    raw=env["wsgi.input"].read(length) if length>0 else b""
-    try:
-        payload=json.loads(raw or b"{}")
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return _json_response(start,{"ok":False,"error":"Malformed JSON body."},"400 Bad Request")
-    if not isinstance(payload,dict):
-        return _json_response(start,{"ok":False,"error":"Channels must be an object."},"400 Bad Request")
-    try:
-        if payload.get("action")=="reset":
-            channels.reset(); message="Notification channels restored to the default."
-        else:
-            channels.save(payload.get("channels",payload)); message="Notification channels saved."
-    except ValueError as exc:
-        logger.info("Notification channel change rejected | error=%s",exc)
-        return _json_response(start,{"ok":False,"error":str(exc),**channels.state()},"400 Bad Request")
-    logger.info("Notification channels changed | %s",message)
-    return _json_response(start,{"ok":True,"message":message,**channels.state()})
+    """GET /api/notifications - read-only delivery channels with redacted targets/secrets."""
+    return _json_response(start,{"ok":True,**channels.state()})
 def _sweep_diagnostic_payload(*, period="30d"):
     """Run the real Sweep V2 data -> prepare -> signal path without dispatching or sending."""
     _require_runtime_leader()
@@ -852,7 +819,7 @@ def _same_origin_request(env):
         referrer_host=_hostname(referer)
         if referrer_host: return bool(host) and referrer_host==host
     return True
-def _admin_api_guard(env,start,*,require_token=False):
+def _admin_api_guard(env,start):
     """Allow public dashboard reads while retaining same-origin API protection."""
     if not _same_origin_request(env):
         logger.info("API request rejected | reason=CROSS_ORIGIN origin=%s host=%s",env.get("HTTP_ORIGIN") or env.get("HTTP_REFERER"),env.get("HTTP_HOST"))
@@ -890,7 +857,7 @@ def build_app():
                 return _json_response(start,{"ok":False,"status":"DEGRADED","timestamp":now().isoformat()},"503 Service Unavailable")
         if path=="/api/dashboard":
             # Public read-only dashboard data; mutations remain separately guarded.
-            guard=_admin_api_guard(env,start,require_token=False)
+            guard=_admin_api_guard(env,start)
             if guard is not None: return guard
             request_started=time.monotonic()
             try:
@@ -903,38 +870,38 @@ def build_app():
         if path=="/api/diagnostics/sweep":
             guard=_admin_api_guard(env,start)
             if guard is not None: return guard
-            try:return _json_response(start,_sweep_diagnostic_payload(period=query.get("period",["30d"])[0]))
+            try:return _json_response(start,_sweep_diagnostic_payload(period=query.get("period",["30d"])[0]),env=env)
             except RuntimeLeadershipError as exc:
-                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
+                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable",env=env)
             except Exception as exc:
                 logger.exception("Sweep diagnostics failed")
-                return _json_response(start,{"ok":False,"error_type":type(exc).__name__,"error":str(exc)},"500 Internal Server Error")
+                return _json_response(start,{"ok":False,"error_type":type(exc).__name__,"error":str(exc)},"500 Internal Server Error",env=env)
         if path=="/api/settings":
             guard=_config_endpoint_guard(env,start)
             if guard is not None: return guard
             if env.get("REQUEST_METHOD","GET").upper()!="GET":
-                return _json_response(start,{"ok":False,"error":"Settings editing is disabled on this public dashboard."},"403 Forbidden")
+                return _json_response(start,{"ok":False,"error":"Settings editing is disabled on this public dashboard."},"403 Forbidden",env=env)
             try:
                 return _settings_response(env,start)
             except Exception as exc:
                 logger.exception("Settings request failed")
-                return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error")
+                return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error",env=env)
         if path=="/api/notifications":
             guard=_config_endpoint_guard(env,start)
             if guard is not None: return guard
             if env.get("REQUEST_METHOD","GET").upper()!="GET":
-                return _json_response(start,{"ok":False,"error":"Notification editing is disabled on this public dashboard."},"403 Forbidden")
+                return _json_response(start,{"ok":False,"error":"Notification editing is disabled on this public dashboard."},"403 Forbidden",env=env)
             try:
                 return _notifications_response(env,start)
             except Exception as exc:
                 logger.exception("Notification channel request failed")
-                return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error")
+                return _json_response(start,{"ok":False,"error":str(exc)},"500 Internal Server Error",env=env)
         if path in ("/api/calendar","/api/news"):
             guard=_admin_api_guard(env,start)
             if guard is not None: return guard
-            try:return _json_response(start,_calendar_payload(query))
-            except RuntimeLeadershipError as exc:return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
-            except Exception as exc:return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request")
+            try:return _json_response(start,_calendar_payload(query),env=env)
+            except RuntimeLeadershipError as exc:return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable",env=env)
+            except Exception as exc:return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request",env=env)
         if path=="/api/backtest":
             guard=_admin_api_guard(env,start)
             if guard is not None: return guard
@@ -945,12 +912,12 @@ def build_app():
                     query.get("strategy",[default_strategy])[0],
                     query.get("symbol",[LIVE_SYMBOLS[0]])[0],
                     query.get("period",["30d"])[0],
-                ))
+                ),env=env)
             except RuntimeLeadershipError as exc:
-                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable")
+                return _json_response(start,{"ok":False,"error":str(exc)},"503 Service Unavailable",env=env)
             except Exception as exc:
                 logger.exception("Backtest request failed")
-                return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request")
+                return _json_response(start,{"ok":False,"error":str(exc)},"400 Bad Request",env=env)
         if path == "/architecture":
             architecture_path = os.path.join(root, "docs", "architecture", "multibot2-architecture.html")
             try:
@@ -958,13 +925,13 @@ def build_app():
             except OSError:
                 start("404 Not Found", [("Content-Type", "text/plain")])
                 return [b"Architecture file not found"]
-            start("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Cache-Control", "no-store")])
-            return [body]
+            return _send_compressed(env, start, "200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Cache-Control", "public, max-age=300")], body)
         if path in files:
             name,typ=files[path]
             try: body=open(os.path.join(root,name),"rb").read()
             except OSError: start("404 Not Found",[("Content-Type","text/plain")]); return [b"Not found"]
-            start("200 OK",[("Content-Type",typ),("Cache-Control","no-store")]); return [body]
+            cache_control="no-store" if path in ("/","/dashboard","/sw.js") else "public, max-age=3600"
+            return _send_compressed(env,start,"200 OK",[("Content-Type",typ),("Cache-Control",cache_control)],body)
         start("404 Not Found",[("Content-Type","text/plain")]); return [b"Not found"]
     return app
 def web_server():

@@ -236,8 +236,8 @@ class DatabaseManager(_SQLiteDatabaseManager):
         missing = sorted(expected - found)
         if missing:
             raise DatabaseError(
-                "Supabase schema is incomplete. Apply the repository migration "
-                "supabase/migrations/20261125000000_initial_multibot_schema.sql; "
+                "Supabase schema is incomplete. Apply all migrations under "
+                "supabase/migrations/; "
                 f"missing tables: {', '.join(missing)}"
             )
 

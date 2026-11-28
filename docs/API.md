@@ -23,7 +23,7 @@ This document is the seam. A new front end may be written against this file alon
 | JSON cache header | `Cache-Control: no-store` |
 | Static cache header | `Cache-Control: no-store` |
 | Serialization | `json.dumps(payload, default=str)` — **non-serializable values are stringified, never dropped** |
-| Auth | Dashboard pages and the main `/api/dashboard` snapshot are public. `/api/diagnostics/sweep`, `/api/calendar`, `/api/news`, `/api/backtest`, `/api/settings` and `/api/notifications` require `X-Admin-Token` or `Authorization: Bearer` when `DASHBOARD_API_TOKEN` is configured (**401** `ADMIN_TOKEN_REQUIRED`). Cross-origin requests receive **403** `CROSS_ORIGIN`. Public `/ping` and `/api/health` expose liveness/keepalive facts. |
+| Auth | Dashboard pages and all read APIs (`/api/dashboard`, `/api/diagnostics/sweep`, `/api/calendar`, `/api/news`, `/api/backtest`, `GET /api/settings`, `GET /api/notifications`) are public to same-origin requests. Cross-origin requests receive **403** `CROSS_ORIGIN`. `POST /api/settings` and `POST /api/notifications` are disabled on the public dashboard (**403 Forbidden**). Public `/ping` and `/api/health` expose liveness/keepalive facts. |
 | CORS | None. Same-origin only; the configuration endpoints enforce it server-side. |
 
 Because of `default=str`, a `pandas.Timestamp`, `Decimal` or `numpy.float64`
@@ -55,9 +55,9 @@ defensively rather than assume a type.
 | GET | `/api/news` | identical — **alias of `/api/calendar`** | 200 JSON | **400** JSON |
 | GET | `/api/backtest` | `strategy`, `symbol`, `period` | 200 JSON | **400** JSON |
 | GET | `/api/settings` | — | 200 JSON | **403** JSON (cross-origin) |
-| POST | `/api/settings` | body (see §11a) | 200 JSON | **400** / **401** / **403** / **405** JSON |
+| POST | `/api/settings` | disabled on public dashboard | — | **403** JSON (disabled / cross-origin) |
 | GET | `/api/notifications` | — | 200 JSON | **403** JSON (cross-origin) |
-| POST | `/api/notifications` | body (see §11b) | 200 JSON | **400** / **401** / **403** / **405** JSON |
+| POST | `/api/notifications` | disabled on public dashboard | — | **403** JSON (disabled / cross-origin) |
 | GET | `/architecture` | — | 200 `text/html` | 404 |
 
 ### Static assets (`main.py::web_server`, the `files` dict)
@@ -135,15 +135,7 @@ Liveness and keepalive facts only. It does not verify Supabase readiness or runt
 {
   "ok": true,
   "status": "ONLINE",              // or "DEGRADED" on 503
-  "version": "3.3.0",              // release_notes.APP_VERSION
   "timestamp": "2026-10-01T09:30:00+05:30",
-  "runtime": true,                 // false once startup sequence failed
-  "database": "TURSO",              // durable Turso/libSQL database;
-                                  // "LOCAL_SQLITE" = local development without Turso
-  "scheduler": true,               // false when STOP event is set
-  "strategies": 3,                 // count from the live registry
-  "provider": "yahoo",             // config.MARKET_DATA_PROVIDER
-  "telegram": "CONFIGURED",        // or "DISABLED" when no bot token
   "keepalive": "OK",               // "OK" | "STALE" | "UNKNOWN"
   "last_ping_at": "2026-10-01T09:20:00+05:30",  // null if never
   "keepalive_age_minutes": 10.0    // null if never
@@ -155,15 +147,16 @@ Liveness and keepalive facts only. It does not verify Supabase readiness or runt
 ## 6. `GET /api/dashboard`
 
 **The entire UI.** One request drives all five pages. The client polls this
-every `CONFIG.refreshMs` (30 000 ms) and appends `?t=<Date.now()>` to defeat
-caching.
+every `CONFIG.refreshMs` (30 000 ms) using `ETag` / `If-None-Match` conditional
+requests (the server returns `304 Not Modified` with an empty body when unchanged,
+backed by a 35s server-side snapshot cache).
 
 Built by `dashboard.py::build_dashboard_snapshot()`.
 
 ```jsonc
 {
   "ok": true,
-  "version": "3.3.0",
+  "version": "3.5.0",
   "generated_at": "2026-10-01T09:30:00+05:30",
   "whats_new": ["…"],                       // config.WHAT_IS_NEW → release_notes
 
@@ -267,12 +260,13 @@ Built by `dashboard.py::build_dashboard_snapshot()`.
   }],
 
   "health": {
-    "database": "TURSO",
+    "database": "SUPABASE_POSTGRES", // or "LOCAL_SQLITE" in local dev
     "provider": "YAHOO",
     "telegram": "CONFIGURED",
     "telegram_failed_deliveries": 0,
     "open_trades": 0,
-    "signal_lifecycle": "ENABLED"
+    "signal_lifecycle": "ENABLED",
+    "degraded_sections": []
   },
 
   // ── Precomputed counts — use these, do not recount client-side ─────────
@@ -292,8 +286,8 @@ Built by `dashboard.py::build_dashboard_snapshot()`.
 ```
 
 ### Limits the client must respect
-- `signals` is capped at **500** rows (`DB.load_signal_history(500)`).
-- `scan_history` is capped at **50** rows (`DB.load_scan_runs(50)`).
+- `signals` is capped at **150** rows (`DB.load_signal_history(150)`).
+- `scan_history` is capped at **30** rows (`DB.load_scan_runs(30)`).
 - `trades` is **uncapped**.
 
 ### Derived-by-backend, not by the client
@@ -511,14 +505,14 @@ A `status: "ERROR"` row also carries `error_type`, `error` and `diagnostics`.
 
 ---
 
-## 11a. `/api/settings` — accounts, assets and routingThese values decide which account takes a real trade and on how much
-capital, so they are written on the server. An unsaved edit is never applied, and a
-refused one leaves the running configuration exactly as it was.
+## 11a. `/api/settings` — accounts, assets and routing
+
+These values decide which account takes a trade and on how much capital.
 
 **Protection** (shared with `/api/notifications`, see the Auth row in §1):
 cross-origin requests are rejected with **403** `{"code":"CROSS_ORIGIN"}`;
-when `DASHBOARD_API_TOKEN` is configured, writes additionally require the
-token and answer **401** `{"code":"ADMIN_TOKEN_REQUIRED"}` without it.
+all non-GET requests are currently rejected with **403 Forbidden**
+(`"Settings editing is disabled on this public dashboard."`).
 
 `GET` returns the live document plus the compiled-in defaults:
 
@@ -583,8 +577,8 @@ resolution.
 
 ## 11b. `/api/notifications` — delivery channels
 
-Same cross-origin (**403**) and optional `DASHBOARD_API_TOKEN` (**401**)
-protection as `/api/settings` (§11a) applies to writes here.
+Same cross-origin (**403**) and read-only public dashboard protection (**403** on
+non-GET requests) as `/api/settings` (§11a) applies here.
 
 Telegram used to be the only transport, inlined in `notification_service.py`.
 It is now one of four channel types in `channels.py`, each with a target and an
@@ -707,7 +701,7 @@ Because the dashboard is the only consumer and the payloads are produced by
 `default=str`, a rebuild should treat every value as "possibly stringified,
 possibly null" and re-verify against a live instance before shipping.
 
-## 12. Runtime ownership and data-fetch boundaries
+## 15. Runtime ownership and data-fetch boundaries
 
 Only the process holding the Supabase runtime lease may run scanner, monitor,
 Telegram polling, or endpoints that can fetch upstream market/calendar data.

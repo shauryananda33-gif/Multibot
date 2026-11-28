@@ -296,3 +296,29 @@ def test_dashboard_reports_the_actual_supabase_database_backend(monkeypatch):
 
     monkeypatch.setattr(main, "DB", SimpleNamespace(supabase_enabled=False, turso_enabled=False))
     assert main._database_backend_label() == "LOCAL_SQLITE"
+
+
+def test_dashboard_etag_ignores_generated_at_and_supports_gzip(monkeypatch):
+    import gzip
+
+    first_payload = {"ok": True, "generated_at": "2026-11-26T10:00:00+05:30", "signals": [{"id": i} for i in range(40)]}
+    second_payload = {"ok": True, "generated_at": "2026-11-26T10:05:00+05:30", "signals": [{"id": i} for i in range(40)]}
+    monkeypatch.setattr(main, "snapshot", lambda: first_payload)
+    status, headers, _ = _call_dashboard_with_headers()
+    assert status == "200 OK"
+
+    monkeypatch.setattr(main, "snapshot", lambda: second_payload)
+    not_modified, _, cached_body = _call_dashboard_with_headers(headers["ETag"])
+    assert not_modified == "304 Not Modified"
+    assert cached_body == b""
+
+    app = main.build_app()
+    captured = {}
+    body = b"".join(app({
+        "PATH_INFO": "/api/dashboard", "REQUEST_METHOD": "GET",
+        "HTTP_HOST": "localhost:3000", "HTTP_ACCEPT_ENCODING": "gzip, deflate",
+        "CONTENT_LENGTH": "0", "wsgi.input": io.BytesIO(b""),
+    }, lambda s, h: captured.update(status=s, headers=dict(h))))
+    assert captured["status"] == "200 OK"
+    assert captured["headers"].get("Content-Encoding") == "gzip"
+    assert json.loads(gzip.decompress(body)) == second_payload

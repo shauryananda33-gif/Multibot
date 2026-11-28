@@ -9,10 +9,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
+import re
 import time
 import zlib
 import warnings
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Lock, RLock
 from typing import Optional
 
@@ -75,9 +78,20 @@ class _YFinanceRateLimitLogCapture(logging.Handler):
 class YahooProvider:
     """Rate-conscious Yahoo Finance provider with resilient caching."""
 
-    def __init__(self, *, session: Optional[object] = None, database=None) -> None:
+    def __init__(
+        self,
+        *,
+        session: Optional[object] = None,
+        database=None,
+        persist_cache: bool = True,
+        csv_dir: Optional[str | Path] = None,
+        local_cache_dir: Optional[str | Path] = None,
+    ) -> None:
         self._external_session = session
         self._database = database
+        self._persist_cache = bool(persist_cache)
+        self._csv_dir = Path(csv_dir) if csv_dir else None
+        self._local_cache_dir = Path(local_cache_dir) if local_cache_dir else None
         self._cache: dict[tuple[str, str, str, bool], tuple[pd.DataFrame, float]] = {}
         self._last_success: dict[tuple[str, str, str, bool], tuple[pd.DataFrame, float]] = {}
         self._backoff_until: dict[str, float] = {}
@@ -247,8 +261,111 @@ class YahooProvider:
         )
         return trimmed
 
+    _CSV_INTERVALS = frozenset({"30m", "1h", "1d"})
+
+    @staticmethod
+    def _csv_filename(symbol: str, interval: str) -> str:
+        safe = re.sub(r'[\\/:*?"<>|]', "_", f"{symbol}__{interval}")
+        return f"{safe}.csv"
+
+    def _read_csv_file(self, path: Path) -> Optional[tuple[pd.DataFrame, float]]:
+        if not path.is_file():
+            return None
+        try:
+            frame = pd.read_csv(path)
+            if frame.empty or "timestamp" not in frame.columns:
+                return None
+            timestamps = pd.to_datetime(frame.pop("timestamp"), utc=True, errors="coerce")
+            if timestamps.isna().any():
+                return None
+            required = ["open", "high", "low", "close"]
+            if any(col not in frame.columns for col in required):
+                return None
+            frame = frame[required].apply(pd.to_numeric, errors="coerce")
+            frame.index = timestamps.tz_convert(IST_TIMEZONE)
+            frame = frame.dropna(subset=required)
+            frame = frame[~frame.index.duplicated(keep="last")].sort_index()
+            if frame.empty:
+                return None
+            age = max(0.0, time.time() - path.stat().st_mtime)
+            return frame, age
+        except Exception as exc:
+            logger.warning("CSV candle cache read failed | path=%s error=%s", path, exc)
+            return None
+
+    def _load_csv_pair(self, symbol: str, interval: str) -> Optional[tuple[pd.DataFrame, float]]:
+        if interval not in self._CSV_INTERVALS:
+            return None
+        filename = self._csv_filename(symbol, interval)
+        candidates: list[tuple[pd.DataFrame, float]] = []
+        for directory in (self._local_cache_dir, self._csv_dir):
+            if directory is None:
+                continue
+            loaded = self._read_csv_file(directory / filename)
+            if loaded is not None:
+                candidates.append(loaded)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: (item[0].index[-1], -item[1]))
+
+    def _save_csv(self, symbol: str, interval: str, frame: pd.DataFrame) -> None:
+        if interval not in self._CSV_INTERVALS or frame.empty:
+            return
+        target_dir = self._local_cache_dir or self._csv_dir
+        if target_dir is None:
+            return
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / self._csv_filename(symbol, interval)
+            tmp = target.with_suffix(".csv.tmp")
+            out = frame[["open", "high", "low", "close"]].copy()
+            out.insert(0, "timestamp", [ts.isoformat() for ts in out.index])
+            out.to_csv(tmp, index=False)
+            os.replace(tmp, target)
+        except OSError as exc:
+            logger.warning("CSV candle cache write failed | symbol=%s interval=%s error=%s", symbol, interval, exc)
+
+    def _trim_to_period(self, frame: pd.DataFrame, period: str) -> Optional[pd.DataFrame]:
+        start = self._period_start(period)
+        if start is None or frame.empty or not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+            return None
+        utc_index = frame.index.tz_convert("UTC")
+        if utc_index.min() > start + pd.Timedelta(days=4):
+            return None
+        trimmed = frame.loc[utc_index >= start].copy()
+        return trimmed if not trimmed.empty else None
+
+    @staticmethod
+    def _incremental_period(existing: pd.DataFrame, interval: str, full_period: str) -> str:
+        if full_period in {"1d", "2d", "5d"} or existing.empty:
+            return full_period
+        last_utc = existing.index.max().tz_convert("UTC").to_pydatetime()
+        gap_days = max(0.0, (datetime.now(timezone.utc) - last_utc).total_seconds() / 86400.0)
+        if gap_days <= 3.0:
+            return "5d"
+        if gap_days <= 25.0:
+            return "1mo"
+        return full_period
+
+    @staticmethod
+    def _merge_csv_frames(existing: pd.DataFrame, tail: pd.DataFrame) -> Optional[pd.DataFrame]:
+        if existing.empty:
+            return tail
+        if tail.empty:
+            return existing
+        overlap = existing.index.intersection(tail.index)
+        if len(overlap) > 0:
+            old_close = existing.loc[overlap, "close"].astype(float)
+            new_close = tail.loc[overlap, "close"].astype(float)
+            rel_diff = ((new_close - old_close).abs() / old_close.replace(0.0, float("nan"))).max()
+            if pd.notna(rel_diff) and float(rel_diff) > 0.005:
+                return None
+        combined = pd.concat([existing[["open", "high", "low", "close"]], tail[["open", "high", "low", "close"]]])
+        combined = combined[~combined.index.duplicated(keep="last")].sort_index()
+        return combined
+
     def _restore_persisted(self, key: tuple[str, str, str, bool]):
-        if self._database is None:
+        if self._database is None or not self._persist_cache:
             return None
         try:
             row = self._database.load_market_data_cache(self._key_id(key))
@@ -354,7 +471,7 @@ class YahooProvider:
             self._failure_count.pop(key[0], None)
             self._backoff_until.pop(key[0], None)
         self._clear_provider_backoff()
-        if self._database is not None:
+        if self._database is not None and self._persist_cache:
             # JSON does not permit IEEE NaN/Infinity values. Convert missing
             # numeric cells to JSON null before persisting the cache payload.
             safe_frame = frame.astype(object).where(pd.notna(frame), None)
@@ -465,6 +582,101 @@ class YahooProvider:
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         })
 
+    def _download_and_normalize(
+        self,
+        symbol: str,
+        *,
+        period: str,
+        interval: str,
+        validate_hourly: bool,
+        priority: int,
+    ) -> pd.DataFrame:
+        from bandwidth_metrics import record as record_bandwidth
+        rate_limit_capture = _YFinanceRateLimitLogCapture()
+        yfinance_logger = logging.getLogger("yfinance")
+        yfinance_logger.addHandler(rate_limit_capture)
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The .*generic.* unit for NumPy timedelta is deprecated.*",
+                    category=DeprecationWarning,
+                )
+                frame = GLOBAL_YAHOO_COORDINATOR.run(
+                    lambda: yf.download(
+                        symbol,
+                        period=period,
+                        interval=interval,
+                        progress=False,
+                        auto_adjust=True,
+                        threads=False,
+                    ),
+                    priority=priority,
+                )
+        except Exception as exc:
+            if isinstance(exc, YahooRequestQueueTimeout):
+                raise
+            record_bandwidth("yahoo_finance", requests=1)
+            message = str(exc)
+            rate_limited = (
+                "429" in message
+                or "too many requests" in message.lower()
+                or "rate limit" in message.lower()
+                or "ratelimit" in message.lower()
+            )
+            self._activate_backoff(
+                symbol,
+                "rate_limit" if rate_limited else "request_error",
+                provider_wide=rate_limited,
+            )
+            raise YahooDataError(f"Yahoo request failed for {symbol}: {exc}") from exc
+        finally:
+            yfinance_logger.removeHandler(rate_limit_capture)
+
+        if frame is None or frame.empty:
+            logged_rate_limit = rate_limit_capture.rate_limited
+            self._activate_backoff(
+                symbol,
+                "logged_rate_limit_empty_response" if logged_rate_limit else "empty_response",
+                provider_wide=logged_rate_limit,
+            )
+            raise YahooDataError(f"Yahoo returned no data for {symbol}")
+
+        if isinstance(frame.columns, pd.MultiIndex):
+            frame.columns = frame.columns.get_level_values(0)
+        frame = frame.loc[:, ~frame.columns.duplicated(keep="first")]
+
+        required = {"Open", "High", "Low", "Close"}
+        if not required.issubset(frame.columns):
+            raise YahooDataError(f"Yahoo response for {symbol} is missing OHLC columns")
+
+        frame = frame[["Open", "High", "Low", "Close"]].copy()
+        frame.columns = [column.lower() for column in frame.columns]
+
+        if not isinstance(frame.index, pd.DatetimeIndex):
+            raise YahooDataError("Yahoo response has no DatetimeIndex")
+        if frame.index.tz is None:
+            frame.index = frame.index.tz_localize("UTC")
+        if frame.index.has_duplicates:
+            raise YahooDataError(
+                f"Yahoo response for {symbol} contains duplicate candle timestamps"
+            )
+
+        frame.index = frame.index.tz_convert(IST_TIMEZONE)
+        frame = frame.sort_index()
+
+        if interval == "1h" and validate_hourly:
+            validate_hourly_observations(frame)
+
+        try:
+            estimated_bytes = int(frame.memory_usage(index=True, deep=True).sum())
+            record_bandwidth(
+                "yahoo_finance", requests=1, estimated_inbound_bytes=estimated_bytes
+            )
+        except Exception:
+            logger.debug("Yahoo bandwidth estimate unavailable", exc_info=True)
+        return frame
+
     def fetch(
         self,
         symbol: str,
@@ -475,7 +687,7 @@ class YahooProvider:
         provenance: Optional[dict] = None,
         priority: int = 5,
     ) -> pd.DataFrame:
-        """Fetch Yahoo candles with cache-first, deduplication and backoff."""
+        """Fetch Yahoo candles with cache-first, CSV baseline, deduplication and backoff."""
         if yf is None:
             raise YahooDataError("yfinance is not installed")
 
@@ -490,7 +702,6 @@ class YahooProvider:
 
         symbol_lock = self._symbol_lock(symbol)
         with symbol_lock:
-            # Another concurrent caller may have completed while we waited.
             cached = self._cached(key)
             if cached is not None:
                 self._record_cache_event(hit=True)
@@ -510,8 +721,6 @@ class YahooProvider:
             if persisted is not None:
                 frame, age = persisted
                 now = time.monotonic()
-                # Retain a bounded historical fallback even when it is too old
-                # for the normal cache TTL. Never present it as a fresh hit.
                 with self._lock:
                     self._last_success[key] = (frame.copy(), now - age)
                 if age <= self._ttl(interval):
@@ -520,6 +729,23 @@ class YahooProvider:
                         self._cache[key] = (frame.copy(), now)
                     self._mark_provenance(provenance, source="persisted_cache", age_seconds=round(age, 1), cache_key=self._key_id(key))
                     return frame.copy()
+
+            csv_base: Optional[pd.DataFrame] = None
+            csv_loaded = self._load_csv_pair(symbol, interval)
+            if csv_loaded is not None:
+                raw_csv, csv_age = csv_loaded
+                csv_trimmed = self._trim_to_period(raw_csv, period)
+                if csv_trimmed is not None:
+                    csv_base = raw_csv
+                    now = time.monotonic()
+                    with self._lock:
+                        self._last_success[key] = (csv_trimmed.copy(), now - csv_age)
+                    if csv_age <= self._ttl(interval):
+                        self._record_cache_event(hit=True)
+                        with self._lock:
+                            self._cache[key] = (csv_trimmed.copy(), now)
+                        self._mark_provenance(provenance, source="csv_cache", age_seconds=round(csv_age, 1), cache_key=self._key_id(key))
+                        return csv_trimmed.copy()
 
             self._record_cache_event(miss=True)
             retry_in = self._in_backoff(symbol)
@@ -536,118 +762,57 @@ class YahooProvider:
                     f"Yahoo Finance is in rate-limit backoff for {symbol}; retry_in={int(retry_in)}s"
                 )
 
-            # yfinance returns parsed DataFrames, not raw response bodies.
-            # Count the request and report parsed-frame size as an estimate only.
-            from bandwidth_metrics import record as record_bandwidth
-            rate_limit_capture = _YFinanceRateLimitLogCapture()
-            yfinance_logger = logging.getLogger("yfinance")
-            yfinance_logger.addHandler(rate_limit_capture)
+            download_period = (
+                self._incremental_period(csv_base, interval, period)
+                if csv_base is not None
+                else period
+            )
             try:
-                with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        "ignore",
-                        message="The .*generic.* unit for NumPy timedelta is deprecated.*",
-                        category=DeprecationWarning,
-                    )
-                    frame = GLOBAL_YAHOO_COORDINATOR.run(
-                        lambda: yf.download(
-                            symbol,
-                            period=period,
-                            interval=interval,
-                            progress=False,
-                            auto_adjust=True,
-                            threads=False,
-                        ),
+                frame = self._download_and_normalize(
+                    symbol,
+                    period=download_period,
+                    interval=interval,
+                    validate_hourly=validate_hourly,
+                    priority=priority,
+                )
+            except YahooRequestQueueTimeout as exc:
+                stale = self._stale(key)
+                if stale is not None:
+                    self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
+                    return stale
+                raise YahooDataError(
+                    f"Yahoo request was not admitted before queue timeout for {symbol}"
+                ) from exc
+            except YahooDataError:
+                stale = self._stale(key)
+                if stale is not None:
+                    self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
+                    return stale
+                raise
+
+            full_to_save = frame
+            if csv_base is not None and download_period != period:
+                merged = self._merge_csv_frames(csv_base, frame)
+                if merged is None:
+                    # Corporate action / split detected on overlapping bars: refresh full window.
+                    full_to_save = self._download_and_normalize(
+                        symbol,
+                        period=period,
+                        interval=interval,
+                        validate_hourly=validate_hourly,
                         priority=priority,
                     )
-            except Exception as exc:
-                if isinstance(exc, YahooRequestQueueTimeout):
-                    stale = self._stale(key)
-                    if stale is not None:
-                        self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
-                        return stale
-                    raise YahooDataError(
-                        f"Yahoo request was not admitted before queue timeout for {symbol}"
-                    ) from exc
-                record_bandwidth("yahoo_finance", requests=1)
-                message = str(exc)
-                rate_limited = (
-                    "429" in message
-                    or "too many requests" in message.lower()
-                    or "rate limit" in message.lower()
-                    or "ratelimit" in message.lower()
-                )
-                self._activate_backoff(
-                    symbol,
-                    "rate_limit" if rate_limited else "request_error",
-                    provider_wide=rate_limited,
-                )
-                stale = self._stale(key)
-                if stale is not None:
-                    self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
-                    return stale
-                raise YahooDataError(f"Yahoo request failed for {symbol}: {exc}") from exc
-            finally:
-                yfinance_logger.removeHandler(rate_limit_capture)
+                    frame = full_to_save
+                else:
+                    full_to_save = merged
+                    trimmed = self._trim_to_period(merged, period)
+                    frame = trimmed if trimmed is not None else merged
+            elif csv_base is not None:
+                merged = self._merge_csv_frames(csv_base, frame)
+                if merged is not None:
+                    full_to_save = merged
 
-            # Empty responses are ambiguous: Yahoo also returns them for
-            # unavailable symbols/periods (for example GC=F intraday history).
-            # Do not block every unrelated market on that evidence alone.
-            # Confirmed HTTP/YF rate-limit exceptions above still use provider-wide
-            # backoff; an empty response receives only a per-symbol cooldown.
-            if frame is None or frame.empty:
-                logged_rate_limit = rate_limit_capture.rate_limited
-                self._activate_backoff(
-                    symbol,
-                    "logged_rate_limit_empty_response" if logged_rate_limit else "empty_response",
-                    provider_wide=logged_rate_limit,
-                )
-                stale = self._stale(key)
-                if stale is not None:
-                    self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
-                    return stale
-                raise YahooDataError(f"Yahoo returned no data for {symbol}")
-
-            if isinstance(frame.columns, pd.MultiIndex):
-                frame.columns = frame.columns.get_level_values(0)
-
-            # yfinance can occasionally return duplicate labels after flattening
-            # a single-ticker MultiIndex response. Keep the first occurrence so
-            # every OHLC field remains a scalar Series at the provider boundary.
-            frame = frame.loc[:, ~frame.columns.duplicated(keep="first")]
-
-            required = {"Open", "High", "Low", "Close"}
-            if not required.issubset(frame.columns):
-                raise YahooDataError(f"Yahoo response for {symbol} is missing OHLC columns")
-
-            frame = frame[["Open", "High", "Low", "Close"]].copy()
-            frame.columns = [column.lower() for column in frame.columns]
-
-            if not isinstance(frame.index, pd.DatetimeIndex):
-                raise YahooDataError("Yahoo response has no DatetimeIndex")
-            if frame.index.tz is None:
-                frame.index = frame.index.tz_localize("UTC")
-
-            if frame.index.has_duplicates:
-                raise YahooDataError(
-                    f"Yahoo response for {symbol} contains duplicate candle timestamps"
-                )
-
-            frame.index = frame.index.tz_convert(IST_TIMEZONE)
-            frame = frame.sort_index()
-
-            if interval == "1h" and validate_hourly:
-                validate_hourly_observations(frame)
-
-            # This is a decoded DataFrame-size estimate, not exact wire bytes.
-            try:
-                estimated_bytes = int(frame.memory_usage(index=True, deep=True).sum())
-                record_bandwidth(
-                    "yahoo_finance", requests=1, estimated_inbound_bytes=estimated_bytes
-                )
-            except Exception:
-                logger.debug("Yahoo bandwidth estimate unavailable", exc_info=True)
-
+            self._save_csv(symbol, interval, full_to_save)
             stored = self._store(key, frame)
             self._mark_provenance(provenance, source="fresh", age_seconds=0.0, cache_key=self._key_id(key))
             return stored

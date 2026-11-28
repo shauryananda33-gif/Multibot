@@ -380,7 +380,7 @@ def validate_symbol(
 
 
 def get_required_symbols() -> tuple[str, ...]:
-    """Return the frozen 19-asset live universe."""
+    """Return the live asset universe."""
     return tuple(LIVE_ASSET_MAP)
 
 
@@ -390,7 +390,7 @@ def yahoo_symbol(symbol: str) -> str:
     asset = LIVE_ASSET_MAP.get(symbol)
     if asset is None:
         raise MarketDataError(
-            f"Symbol is outside the fixed 19-asset universe: {symbol}"
+            f"Symbol is outside the live asset universe: {symbol}"
         )
     return asset.yahoo_symbol
 

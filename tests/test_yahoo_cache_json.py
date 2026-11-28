@@ -323,3 +323,59 @@ def test_fetch_uses_bounded_persisted_candles_during_provider_backoff():
     assert len(result) == 1
     assert provenance["source"] == "stale_fallback"
     assert provider.in_backoff("BTC-USD")
+
+
+def test_csv_baseline_serves_fresh_and_merges_incremental_tail(tmp_path, monkeypatch):
+    class NeverCalledDb:
+        def load_market_data_cache(self, cache_key):
+            raise AssertionError("Supabase candle cache must not be read when persist_cache=False")
+
+        def save_market_data_cache(self, *args, **kwargs):
+            raise AssertionError("Supabase candle cache must not be written when persist_cache=False")
+
+    csv_dir = tmp_path / "repo_candles"
+    local_dir = tmp_path / "local_candles"
+    provider = yahoo_provider.YahooProvider(
+        database=NeverCalledDb(),
+        persist_cache=False,
+        csv_dir=csv_dir,
+        local_cache_dir=local_dir,
+    )
+    now = pd.Timestamp.now(tz="UTC").floor("D")
+    base_index = pd.date_range(end=now - pd.Timedelta(days=1), periods=65, freq="D").tz_convert("Asia/Kolkata")
+    base_frame = pd.DataFrame(
+        {"open": 100.0, "high": 102.0, "low": 99.0, "close": 101.0},
+        index=base_index,
+    )
+    provider._save_csv("GC=F", "1d", base_frame)
+
+    # Fresh local CSV avoids both Yahoo and Supabase.
+    monkeypatch.setattr(yahoo_provider.yf, "download", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("should hit fresh CSV")))
+    provenance = {}
+    hit = provider.fetch("GC=F", period="60d", interval="1d", validate_hourly=False, provenance=provenance)
+    assert provenance["source"] == "csv_cache"
+    assert len(hit) > 0
+
+    # Expired CSV TTL triggers a small tail fetch (5d, not 60d) and merges locally.
+    provider.clear_cache()
+    csv_file = local_dir / "GC=F__1d.csv"
+    import os
+    old_mtime = time.time() - 3600
+    os.utime(csv_file, (old_mtime, old_mtime))
+
+    requested_periods = []
+
+    def fake_tail_download(symbol, **kwargs):
+        requested_periods.append(kwargs.get("period"))
+        idx = pd.DatetimeIndex([base_index[-1], now]).tz_convert("UTC")
+        return pd.DataFrame(
+            {"Open": [100.0, 103.0], "High": [102.0, 105.0], "Low": [99.0, 102.0], "Close": [101.0, 104.0]},
+            index=idx,
+        )
+
+    monkeypatch.setattr(yahoo_provider.yf, "download", fake_tail_download)
+    monkeypatch.setattr(yahoo_provider.GLOBAL_YAHOO_COORDINATOR, "run", lambda op, priority=5: op())
+    merged = provider.fetch("GC=F", period="60d", interval="1d", validate_hourly=False)
+    assert requested_periods == ["5d"]
+    assert merged["close"].iloc[-1] == 104.0
+    assert len(pd.read_csv(csv_file)) == len(base_frame) + 1

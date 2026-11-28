@@ -34,7 +34,8 @@ class TradeMonitor:
         current=pd.Timestamp.now(tz="Asia/Kolkata") if now is None else pd.Timestamp(now)
         if current.tzinfo is None: raise ValueError("now must be timezone-aware")
         closed=[]; errors=[]
-        for row in self.database.load_trades("OPEN"):
+        open_rows = self.database.load_trades("OPEN")
+        for row in open_rows:
             symbol=row.get("symbol")
             try:
                 price=self.price_lookup(symbol)
@@ -74,4 +75,5 @@ class TradeMonitor:
                 closed.append(payload)
             except Exception as exc:
                 logger.exception("Trade monitor failed for %s",row.get("id")); errors.append({"id":row.get("id"),"symbol":symbol,"reason":str(exc)})
-        return {"status":"OK" if not errors else "PARTIAL","closed":closed,"errors":errors,"active_trades":len(self.database.load_trades("OPEN")),"timestamp":current.isoformat()}
+        remaining = len(open_rows) - len(closed) if not errors else len(self.database.load_trades("OPEN"))
+        return {"status":"OK" if not errors else "PARTIAL","closed":closed,"errors":errors,"active_trades":max(0, remaining),"timestamp":current.isoformat()}

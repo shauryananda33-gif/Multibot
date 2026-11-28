@@ -4,13 +4,19 @@ MULTIBOT2 uses Supabase Postgres as its durable production database. It does
 not use the Supabase REST API key as a database connection and no longer
 requires Turso/libSQL.
 
-## 1. Apply the database migration
+## 1. Apply the database migrations
 
-The versioned schema is in
-supabase/migrations/20261125000000_initial_multibot_schema.sql. Apply it to
-the Multibot Supabase project before deploying the application. The migration
-creates a private multibot schema, all runtime tables, indexes and access
-restrictions. It intentionally creates no tables in the exposed public schema.
+The versioned schema is defined in the ordered migrations under
+`supabase/migrations/`:
+
+- `supabase/migrations/20261125000000_initial_multibot_schema.sql`
+- `supabase/migrations/20261125175557_multibot_security_and_request_coordination.sql`
+- `supabase/migrations/20261126112433_telegram_update_durability.sql`
+
+Apply all migrations to the Multibot Supabase project before deploying the
+application. Together they create the private `multibot` schema, all runtime
+tables, indexes, RLS settings, and access restrictions. They intentionally
+create no tables in the exposed `public` schema.
 
 ## 2. Configure Render
 
@@ -56,8 +62,6 @@ process that owns the unexpired lease may start scanners, trade monitoring,
 reminders and Telegram polling. A database outage therefore fails closed for
 trading; it must never fall back to per-container SQLite in production.
 
-The migration stores account state, trades, signals, delivery history, scan
-history, market-data cache, calendar cache, app configuration and the runtime
-lease in the private schema. It does not import historical state from Turso.
-The connected Supabase project currently has no existing public app tables or
-migration history, so this establishes the initial schema.
+The migrations store account state, trades, signals, delivery history, scan
+history, market-data cache, calendar cache, app configuration, Telegram polling
+state, and the runtime lease in the private `multibot` schema.

@@ -23,7 +23,7 @@ class ReminderService:
             if self.notifier.deliver(signal_id=sid,message=reminder_message(text),kind="REMINDER",metadata={"signal_key":row["signal_key"]}):
                 self.database.mark_reminder_sent(row["signal_key"],current.isoformat()); sent+=1
         return sent
-    def start(self,interval_seconds=30):
+    def start(self,interval_seconds=60):
         def loop():
             while not self._stop.is_set():
                 try:self.run_once()

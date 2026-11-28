@@ -8,7 +8,7 @@ separate static-site host and no frontend-to-API proxy.
 
 - Service: `Multibot`
 - Runtime: Python 3.12
-- Build: `pip install -r requirements.txt`
+- Build: `pip install -r requirements.lock`
 - Start: `python3 main.py`
 - Health/keepalive: `/ping`
 - Dashboard: https://multibot-3hsb.onrender.com/dashboard
@@ -26,14 +26,13 @@ configuration:
 - `SUPABASE_DB_URL`: Supabase PostgreSQL session-pooler connection string
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
-- `DASHBOARD_API_TOKEN`: a long, randomly generated secret used only for
-  configuration-changing POST requests. It is not required to open or view the
-  public dashboard.
 
-The main dashboard snapshot at `/api/dashboard` is public to anyone with the URL.
-Diagnostics, backtests, settings, and notification-channel APIs remain protected
-because they expose additional configuration or can trigger expensive data work.
-Do not put the token in source control, build logs, or public documentation.
+The dashboard, `/api/dashboard`, `/api/diagnostics/sweep`, `/api/calendar`,
+`/api/news`, `/api/backtest`, `GET /api/settings`, and `GET /api/notifications`
+are public read-only endpoints guarded against cross-origin browser requests.
+Configuration writes (`POST /api/settings` and `POST /api/notifications`) are
+disabled on the public dashboard (**403 Forbidden**). Do not put secrets in
+source control, build logs, or public documentation.
 
 The public `/ping` and `/api/health` endpoints remain available.
 

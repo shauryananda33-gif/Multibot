@@ -166,12 +166,11 @@ class NotificationService:
         return True
 
     def deliver(self, *, signal_id, message, kind="SIGNAL", metadata=None, audit=True):
-        # The silence gate reads the signal_events row to decide why a signal must
-        # not reach chat. Scan results and periodic summaries (audit=False) have no
-        # such row by design, so the gate must not apply to them -- otherwise every
-        # scan/summary delivery would be muted and the summary watermark would
-        # never advance.
-        if audit and self._should_silence(signal_id=signal_id):
+        # The silence gate suppresses redundant initial SIGNAL bubbles (e.g.
+        # non-directional, stale, duplicate-limited, or already-delivered rows).
+        # Reminders and trade-closed alerts intentionally target an already
+        # DELIVERED signal_id, so they must never be silenced by its status.
+        if audit and kind == "SIGNAL" and self._should_silence(signal_id=signal_id):
             self._audit(
                 signal_id,
                 "telegram",

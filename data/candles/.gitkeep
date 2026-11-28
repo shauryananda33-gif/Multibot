@@ -1,0 +1,2 @@
+# Shipped historical OHLCV baselines (<yahoo_symbol>__<interval>.csv).
+# Populated by `python tools/sync_candle_csvs.py` or the Sync Candle CSVs workflow.
