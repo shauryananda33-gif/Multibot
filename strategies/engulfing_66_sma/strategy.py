@@ -160,6 +160,49 @@ class Engulfing66SMA(Strategy):
             return True, "BEARISH_ENGULFING_AT_66_SMA", diagnostics
         return False, "NO_APPROVED_SETUP", diagnostics
 
+    def backtest_signals(self, symbol: str, candles: pd.DataFrame) -> list[Signal]:
+        """Calculate SMA/ATR once, then classify completed historical bars."""
+        cfg = self.validate_config({})
+        frame = candles.copy().sort_index()
+        count = len(frame)
+        if not count:
+            return []
+        sma, atr = self._indicators(frame, cfg)
+        minimum = max(cfg["sma_length"] + cfg["slope_length"] + 2, cfg["atr_length"] + 2, 3)
+        last_signal_index = -10**9
+        result = []
+        for slot in range(count):
+            # confirm_only excludes the bar stamped at the backtest timestamp.
+            index = slot - 1 if cfg["confirm_only"] else slot
+            timestamp = frame.index[index] if index >= 0 else frame.index[slot]
+            if index < 0 or index + 1 < minimum:
+                result.append(Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL",
+                                     timestamp, "1H", "INSUFFICIENT_DATA",
+                                     metadata={"candle_count": max(0, index + 1), "required": minimum}))
+                continue
+            approved, reason, diagnostics = self._signal_at(
+                frame, index, cfg=cfg, sma=sma, atr=atr, last_signal_index=last_signal_index
+            )
+            if approved:
+                last_signal_index = index
+                direction = "BUY" if reason.startswith("BULLISH") else "SELL"
+                entry = float(frame["close"].iloc[index])
+                atr_value = float(diagnostics["atr"])
+                stop_distance = cfg["stop_atr"] * atr_value
+                target_distance = stop_distance * cfg["target_r"]
+                if direction == "BUY":
+                    stop_loss, take_profit = entry - stop_distance, entry + target_distance
+                else:
+                    stop_loss, take_profit = entry + stop_distance, entry - target_distance
+                diagnostics.update({"entry": entry, "stop_loss": stop_loss, "take_profit": take_profit,
+                                    "risk_reward": cfg["target_r"], "risk_inr": 2000.0, "target_inr": 4000.0})
+                result.append(Signal(self.manifest.name, self.manifest.version, symbol, direction,
+                                     timestamp, "1H", reason, entry, stop_loss, take_profit, diagnostics))
+            else:
+                result.append(Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL",
+                                     timestamp, "1H", reason, metadata=diagnostics))
+        return result
+
     def generate_signal(self, symbol: str, candles: pd.DataFrame, *, now: pd.Timestamp) -> Signal:
         cfg = self.validate_config({})
         frame = candles.copy().sort_index()
