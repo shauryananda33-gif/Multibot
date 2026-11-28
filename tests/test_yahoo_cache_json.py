@@ -213,3 +213,113 @@ def test_unknown_stale_period_uses_only_an_exact_cache_key():
 
     assert result is not None
     assert result["close"].iloc[0] == 2.0
+
+
+
+def test_persisted_cache_stale_retention_is_candle_interval_aware():
+    class CacheDatabase:
+        def __init__(self, frame, age_seconds):
+            self.frame = frame
+            self.age_seconds = age_seconds
+
+        def load_market_data_cache(self, cache_key):
+            now = pd.Timestamp.now(tz="UTC")
+            payload = json.dumps({
+                "columns": list(self.frame.columns),
+                "index": [x.isoformat() for x in self.frame.index],
+                "data": self.frame.values.tolist(),
+            }, separators=(",", ":"))
+            compressed = yahoo_provider.CACHE_PAYLOAD_PREFIX + base64.b64encode(
+                zlib.compress(payload.encode("utf-8"))
+            ).decode("ascii")
+            return {
+                "payload": compressed,
+                "updated_at": (now - pd.Timedelta(seconds=self.age_seconds)).isoformat(),
+            }
+
+    frame = pd.DataFrame(
+        {"open": [100.0], "high": [101.0], "low": [99.0], "close": [100.5]},
+        index=pd.DatetimeIndex([pd.Timestamp.now(tz="UTC")]).tz_convert("Asia/Kolkata"),
+    )
+
+    # A 30-minute strategy cache survives a short provider outage, while a
+    # one-minute quote cache does not become a stale SL/TP monitoring price.
+    intraday = yahoo_provider.YahooProvider(
+        database=CacheDatabase(frame, 30 * 60)
+    )._restore_persisted(("BTC-USD", "30d", "30m", False))
+    quote = yahoo_provider.YahooProvider(
+        database=CacheDatabase(frame, 30 * 60)
+    )._restore_persisted(("BTC-USD", "1d", "1m", False))
+
+    assert intraday is not None
+    assert abs(intraday[1] - 30 * 60) < 2
+    assert quote is None
+
+
+def test_persisted_daily_cache_survives_provider_cooldown_but_has_a_hard_bound():
+    class CacheDatabase:
+        def __init__(self, age_seconds):
+            self.age_seconds = age_seconds
+
+        def load_market_data_cache(self, cache_key):
+            now = pd.Timestamp.now(tz="UTC")
+            frame = pd.DataFrame(
+                {"open": [100.0], "high": [101.0], "low": [99.0], "close": [100.5]},
+                index=pd.DatetimeIndex([now]).tz_convert("Asia/Kolkata"),
+            )
+            payload = json.dumps({
+                "columns": list(frame.columns),
+                "index": [x.isoformat() for x in frame.index],
+                "data": frame.values.tolist(),
+            }, separators=(",", ":"))
+            return {
+                "payload": yahoo_provider.CACHE_PAYLOAD_PREFIX + base64.b64encode(
+                    zlib.compress(payload.encode("utf-8"))
+                ).decode("ascii"),
+                "updated_at": (now - pd.Timedelta(seconds=self.age_seconds)).isoformat(),
+            }
+
+    restored = yahoo_provider.YahooProvider(
+        database=CacheDatabase(8 * 60 * 60)
+    )._restore_persisted(("GC=F", "2y", "1d", False))
+    expired = yahoo_provider.YahooProvider(
+        database=CacheDatabase(4 * 24 * 60 * 60)
+    )._restore_persisted(("GC=F", "2y", "1d", False))
+
+    assert restored is not None
+    assert abs(restored[1] - 8 * 60 * 60) < 2
+    assert expired is None
+
+
+
+def test_fetch_uses_bounded_persisted_candles_during_provider_backoff():
+    class CacheDatabase:
+        def load_market_data_cache(self, cache_key):
+            now = pd.Timestamp.now(tz="UTC")
+            frame = pd.DataFrame(
+                {"open": [100.0], "high": [101.0], "low": [99.0], "close": [100.5]},
+                index=pd.DatetimeIndex([now - pd.Timedelta(minutes=30)]).tz_convert("Asia/Kolkata"),
+            )
+            payload = json.dumps({
+                "columns": list(frame.columns),
+                "index": [x.isoformat() for x in frame.index],
+                "data": frame.values.tolist(),
+            }, separators=(",", ":"))
+            return {
+                "payload": yahoo_provider.CACHE_PAYLOAD_PREFIX + base64.b64encode(
+                    zlib.compress(payload.encode("utf-8"))
+                ).decode("ascii"),
+                "updated_at": (now - pd.Timedelta(minutes=30)).isoformat(),
+            }
+
+    provider = yahoo_provider.YahooProvider(database=CacheDatabase())
+    provider._activate_backoff("BTC-USD", "test_provider_cooldown")
+    provenance = {}
+    result = provider.fetch(
+        "BTC-USD", period="30d", interval="30m",
+        validate_hourly=False, provenance=provenance,
+    )
+
+    assert len(result) == 1
+    assert provenance["source"] == "stale_fallback"
+    assert provider.in_backoff("BTC-USD")

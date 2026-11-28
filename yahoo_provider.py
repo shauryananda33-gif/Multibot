@@ -31,6 +31,18 @@ YF_TTL_BY_INTERVAL = {"1m": 45.0, "30m": 120.0, "1h": 300.0, "4h": 300.0, "1d": 
 YAHOO_BACKOFF_SECONDS = 120.0
 YAHOO_MAX_BACKOFF_SECONDS = 1800.0
 YAHOO_STALE_GRACE_SECONDS = 900.0
+# Persistent fallback is bounded by candle interval, not one wall-clock TTL.
+# A wider window only makes historical candles available to strategy code;
+# completed-candle construction and SignalGate still decide whether a signal
+# is actionable. One-minute quotes stay deliberately short-lived for SL/TP
+# monitoring.
+YAHOO_STALE_GRACE_BY_INTERVAL = {
+    "1m": 90.0,
+    "30m": 2 * 60 * 60.0,
+    "1h": 4 * 60 * 60.0,
+    "4h": 8 * 60 * 60.0,
+    "1d": 72 * 60 * 60.0,
+}
 CACHE_PAYLOAD_PREFIX = "zlib1:"
 YAHOO_BACKOFF_CONFIG_KEY = "yahoo_provider_backoff_v1"
 
@@ -145,6 +157,13 @@ class YahooProvider:
         return YF_TTL_BY_INTERVAL.get(interval, 60.0)
 
     @staticmethod
+    def _stale_grace(interval: str) -> float:
+        """Maximum cache age allowed for outage fallback by candle interval."""
+        return YAHOO_STALE_GRACE_BY_INTERVAL.get(
+            str(interval), YAHOO_STALE_GRACE_SECONDS
+        )
+
+    @staticmethod
     def _record_cache_event(*, hit: bool = False, miss: bool = False) -> None:
         try:
             from bandwidth_metrics import record as record_bandwidth
@@ -249,7 +268,7 @@ class YahooProvider:
             if updated.tzinfo is None:
                 updated = updated.tz_localize("UTC")
             age = (datetime.now(timezone.utc) - updated.to_pydatetime().astimezone(timezone.utc)).total_seconds()
-            if age > YAHOO_STALE_GRACE_SECONDS:
+            if age < 0 or age > self._stale_grace(key[2]):
                 return None
             stored_payload = str(row["payload"])
             from bandwidth_metrics import record as record_bandwidth
@@ -283,7 +302,7 @@ class YahooProvider:
             if start is None:
                 # An unrecognised period can only use an exact-key stale copy;
                 # another period cannot be proven to cover its history window.
-                if exact is None or now - exact[1] > YAHOO_STALE_GRACE_SECONDS:
+                if exact is None or now - exact[1] > self._stale_grace(key[2]):
                     return None
                 frame = exact[0]
                 return frame.copy() if not frame.empty else None
@@ -294,7 +313,8 @@ class YahooProvider:
                     continue
                 if other_key[0] == key[0] and other_key[2] == key[2] and other_key[3] == key[3]:
                     candidates.append(item)
-        fresh = [(frame, saved) for frame, saved in candidates if now - saved <= YAHOO_STALE_GRACE_SECONDS]
+        stale_grace = self._stale_grace(key[2])
+        fresh = [(frame, saved) for frame, saved in candidates if 0 <= now - saved <= stale_grace]
         compatible = []
         for frame, saved in fresh:
             if frame.empty or not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
@@ -489,12 +509,15 @@ class YahooProvider:
             persisted = self._restore_persisted(key)
             if persisted is not None:
                 frame, age = persisted
+                now = time.monotonic()
+                # Retain a bounded historical fallback even when it is too old
+                # for the normal cache TTL. Never present it as a fresh hit.
+                with self._lock:
+                    self._last_success[key] = (frame.copy(), now - age)
                 if age <= self._ttl(interval):
                     self._record_cache_event(hit=True)
-                    now = time.monotonic()
                     with self._lock:
                         self._cache[key] = (frame.copy(), now)
-                        self._last_success[key] = (frame.copy(), now - age)
                     self._mark_provenance(provenance, source="persisted_cache", age_seconds=round(age, 1), cache_key=self._key_id(key))
                     return frame.copy()
 
