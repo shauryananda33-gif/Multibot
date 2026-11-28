@@ -80,3 +80,34 @@ Every section in **Tools** was tested live against `https://multibot-3hsb.onrend
 8. **Calendar UI**: Add date input + impact filter chips (`All`, `High`, `Medium`, `Low`) wired to `/api/calendar?date=...&impact=...`.
 9. **URL hash routing**: Sync active tab to `#overview`, `#signals`, `#history`, `#calendar`, `#tools`.
 10. **What's New emoji**: Replace `🛟` with `🛡️` in `release_notes.py`, `WHATS_NEW.md`, and `README.md`.
+
+---
+
+## 6. Design Audit (`frontend-design` + `ui-ux-pro-max` — Keeping Basic Structure)
+
+This section applies the installed `frontend-design` and `ui-ux-pro-max` skills **without** changing the 5-page shell (`Home`, `Signals`, `History`, `Calendar`, `Tools`), the 3-style × 5-accent × Light/Dark token system, or the zero-framework HTML/CSS/JS stack.
+
+### A. Anti-AI-Slop Fixes (`frontend-design`)
+1. **Replace generic hero copy with live trading telemetry:**
+   - `dashboard.html:10` opens Home with `"Smarter signals. Clearer decisions."` — generic SaaS filler that pushes real numbers down.
+   - **Keep `.hero` structure**, but make `#heroStatus` show live portfolio/session state (e.g. `NSE Closed · 2 Open Positions · ₹4,91,359.23`) and `#heroText` show the latest scan timestamp/outcome.
+2. **Separate live KPIs from static locked rules visually:**
+   - Currently `Account value` (live) and `Leverage 1×` (static) both use identical `.metric-grid.four` `.metric-card` boxes.
+   - **Keep `.overview-risk`**, but render the 4 locked rules as a quiet, compact inline rule strip instead of 4 full KPI cards competing with Account Value and Total P/L.
+3. **Cut repetitive ALL-CAPS eyebrow noise:**
+   - `dashboard.html` places tracked-out ALL-CAPS eyebrows (`COMMAND CENTER`, `ACCOUNT PERFORMANCE`, `RISK CONTROL`, `ACTIVITY`, `SCAN TRUTH`, `LIVE STATE`) above almost every heading. Keep page-level context only where it adds orientation, and remove redundant section eyebrows.
+4. **Distinctive typography within existing `--font` / `--font-tnum` tokens:**
+   - `styles.css:46` defaults to `"Inter"`. Pair a crisp geometric/grotesque display+UI stack (e.g. `"Plus Jakarta Sans"` or `"IBM Plex Sans"` with `"JetBrains Mono"` / `tabular-nums` for prices and timestamps) while keeping `--font` and `--font-tnum` CSS variables intact.
+
+### B. UX & Accessibility Fixes (`ui-ux-pro-max`, Priority Order)
+1. **Accessibility & Touch Targets (`CRITICAL`):**
+   - **Notification chips:** Add `.active` class alongside `aria-pressed="true"` in `notifications.js` so selected events have clear fill/border contrast.
+   - **Mobile touch targets:** Bump `.chip-option` / `.settings-toggle` / `.icon-button` on `@media (max-width: 760px)` from `29–30px` (`styles.css:666`) to `min-height: 40px` (`44px` for primary nav/actions).
+   - **Crisp SVG icons:** Replace raw Unicode symbols (`⌂`, `◆`, `◷`, `◉`, `⚙`, `✦`, `↻`, `◐`) in `dashboard.html` nav/topbar with uniform `18×18` inline `stroke="currentColor"` SVGs (`aria-hidden="true"`).
+2. **Navigation & Deep Linking (`HIGH`):**
+   - Sync `setPage()` in `app.js` with `window.location.hash` (`#overview`, `#signals`, `#history`, `#calendar`, `#tools`) and `hashchange` listener so refresh and browser Back preserve the active tab.
+3. **Forms & Feedback (`MEDIUM`):**
+   - In public read-only mode, disable/badge `Save` and `+ New` controls in Tools (`app.js`, `notifications.js`) and fix `Reset` to discard unsaved draft rows.
+4. **Charts & Tabular Data (`MEDIUM`):**
+   - Ensure all prices, P/L, and timestamps use `font-variant-numeric: tabular-nums` (`--font-tnum`), and keep `Entry` + `P/L` visible on `390px` mobile History rows.
+
