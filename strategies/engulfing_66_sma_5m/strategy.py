@@ -40,7 +40,14 @@ class Engulfing66SMA5m(Engulfing66SMA):
     )
 
     def data_request(self, symbol: str, *, period: str = "5d") -> tuple[str, str]:
-        return "5m", period if period in {"5d", "1mo", "30d", "60d"} else "5d"
+        supported = {"5d", "1mo", "30d", "60d"}
+        requested = str(period or "5d").strip().lower()
+        if requested not in supported:
+            raise ValueError(
+                "5-minute Yahoo backtests support 5d, 1mo, 30d, or 60d only; "
+                "Yahoo does not provide a reliable 1-year 5-minute history."
+            )
+        return "5m", requested
 
 
 def create_strategy() -> Engulfing66SMA5m:
