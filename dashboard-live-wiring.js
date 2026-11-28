@@ -26,7 +26,7 @@
   };
   const render=data=>{
     lastSnapshot=data;
-    const openEl=document.getElementById("historyOpenTrades");
+    const openEl=null;
     const scanEl=document.getElementById("historyScanHistory");
     if(!openEl&&!scanEl)return;
     const trades=Array.isArray(data?.trades)?data.trades:[];

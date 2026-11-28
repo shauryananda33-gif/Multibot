@@ -1,12 +1,10 @@
-# What's New — MULTIBOT2 v3.5.0
+# What's New — MULTIBOT2 v3.6.0
 
 Generated from release_notes.py.
 
-- 🔇 Per-sweep scan noise is gone: the 🔎 Scan complete Telegram bubble is now strictly opt-in per channel, and stale, duplicate, reminder, account-limit and MARKET_DATA_ERROR evaluations stay silent while the dashboard and deliveries audit still record every evaluated signal.
-- 🔔 Reminders & trade-close alerts fixed: NotificationService now applies the silence gate only to initial SIGNAL deliveries, preventing REMINDER and TRADE_CLOSED alerts from being suppressed.
-- 📈 GitHub CSV candle cache: 1D/1H/30M candles load from local/GitHub CSV baselines and only tail-fetch recent bars from Yahoo Finance, bypassing Supabase candle storage.
-- ⚡ Render & Supabase bandwidth cuts: dashboard snapshots cache for 180s with stable ETags (304 Not Modified), gzip compression (>=512B), 150-signal history cap, and slower idle polling.
-- 🛠️ Scan error & trade monitor fixes: fixed MARKET_DATA_ERROR alert formatting (UnboundLocalError), null opened_at handling in trade settlement, and split re-download fallback.
-- 🔐 Telegram chat ids are now secrets in the notifications card: the dashboard API redacts every channel target and secret, so a screenshot or API read can no longer expose your chat id.
-- 🛟 The environment-default Telegram channel shows a Default chip instead of Remove, so the last working notification path cannot be deleted by accident, and editing it only changes the chat id.
-- 📱 The notifications card was rebuilt into a compact three-line channel row with a scannable event grid, saving vertical space in Tools.
+- 🎨 Redesigned Mavis Dashboard v2: 3 distinct visual styles (Terminal, Neo Brutalism, Modern glassmorphism), Dark/Light modes, 5 accent-reactive palettes, and 4 background patterns (Plain, Grid, Dots, Glow).
+- 📱 Mobile-first workspace: compact Home product banner, split-pane overview, 5-equal mobile bottom nav, inline compact trade detail expansion, and color-coded Economic Calendar impact cards (High/Medium/Low).
+- 🧪 Backtest Signals & Trades ledger: displays all directional signals generated (Entry/SL/TP + reason) and all completed trades (Entry/Exit/bars + P/L), with collapsible Backtest and Clear controls.
+- 📈 New Engulf 66 SMA 5min strategy & dedicated nifty_5m account (20 daily limit, 10 max trades/asset/day), with period-aware Yahoo candle fetching in backtests.
+- 🔇 Per-sweep scan noise is gone: Scan complete Telegram alerts stay opt-in per channel, while reminders and trade-close notifications remain active.
+- ⚡ Render & Supabase bandwidth cuts: 180s snapshot cache with stable ETags (304), gzip compression (>=512B), 150-signal history cap, and redacted Telegram channel secrets.

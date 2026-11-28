@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-11-28 (Session 4) — Dashboard v2 Merge & Release v3.6.0
+
+### Summary
+- Merged the redesigned mobile-first **Mavis Dashboard v2** into **[dashboard.html](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/dashboard.html)**, **[styles.css](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/styles.css)**, and **[app.js](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/app.js)** while preserving all `/api/*` endpoints and static routes in `main.py`.
+- Added 3 distinct visual styles (**Terminal**, **Neo Brutalism**, **Modern**), Dark/Light themes, 5 accent-reactive palettes, 4 background patterns (`Plain`, `Grid`, `Dots`, `Glow`), compact Home hero banner, 5-equal mobile bottom nav, inline compact trade detail expansion (`View` → `Hide`), color-coded Calendar impact cards, and Backtest **Signals Generated** + **Trades Taken** ledgers with collapsible header and **Clear** button.
+- Bumped `APP_VERSION` to **`3.6.0`** in **[release_notes.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/release_notes.py)** and synced **[WHATS_NEW.md](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/WHATS_NEW.md)** and **[README.md](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/README.md)**.
+
+---
+
 ## 2026-11-28 (Session 3b) — Live Dashboard & UX/UI Max Audit
 
 ### Summary

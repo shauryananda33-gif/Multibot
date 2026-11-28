@@ -132,13 +132,13 @@
         <label class="settings-field"><span class="settings-field-label">${channel.type === "telegram" ? "Chat id" : "Webhook URL"}</span><input class="settings-input" type="text" value="${escapeHtml(channel.target || "")}" aria-label="${base} ${channel.type === "telegram" ? "chat id" : "webhook URL"}" placeholder="${escapeHtml(targetPlaceholder)}" autocomplete="off" spellcheck="false" data-notify-id="${escapeHtml(channel.id)}" data-notify-field="target"></label>${secretField(channel, webhook, base)}`;
     const events = (model.options.events || []).map((event) => {
       const on = channel.events.includes(event);
-      return `<button class="chip-option settings-toggle" type="button" aria-pressed="${on}" data-notify-id="${escapeHtml(channel.id)}" data-notify-event="${escapeHtml(event)}">${escapeHtml(EVENT_LABELS[event] || event)}</button>`;
+      return `<button class="chip-option settings-toggle${on ? " active" : ""}" type="button" aria-pressed="${on}" data-notify-id="${escapeHtml(channel.id)}" data-notify-event="${escapeHtml(event)}">${escapeHtml(EVENT_LABELS[event] || event)}</button>`;
     }).join("");
     return `<div class="settings-row settings-account${channel.default ? " is-default" : ""}">
       <div class="settings-account-head">
         <span class="settings-label" title="${escapeHtml(channel.id)}">${base}<span class="settings-type-chip">${typeLabel}</span></span>
         <span class="settings-inline">
-          <button class="chip-option settings-toggle" type="button" aria-pressed="${channel.enabled ? "true" : "false"}" data-notify-id="${escapeHtml(channel.id)}" data-notify-toggle="enabled">Enabled</button>
+          <button class="chip-option settings-toggle${channel.enabled ? " active" : ""}" type="button" aria-pressed="${channel.enabled ? "true" : "false"}" data-notify-id="${escapeHtml(channel.id)}" data-notify-toggle="enabled">Enabled</button>
           ${channel.default
             ? `<span class="settings-default-chip" title="Comes from the environment. Saving your own channels replaces it; Telegram keeps delivering from the environment while the token and chat id are configured.">Default</span>`
             : `<button class="secondary-button" type="button" data-notify-remove="${index}" aria-label="Remove ${base}">Remove</button>`}
@@ -260,7 +260,9 @@
           // toggle simply does not turn off.
           return;
         }
-        subscription.setAttribute("aria-pressed", channel && channel.events.includes(name) ? "true" : "false");
+        const isOn = !!(channel && channel.events.includes(name));
+        subscription.setAttribute("aria-pressed", isOn ? "true" : "false");
+        subscription.classList.toggle("active", isOn);
         return;
       }
       const toggle = target.closest("[data-notify-toggle]");
@@ -268,11 +270,12 @@
         const on = toggle.getAttribute("aria-pressed") !== "true";
         setField(toggle.dataset.notifyId, "enabled", on);
         toggle.setAttribute("aria-pressed", on ? "true" : "false");
+        toggle.classList.toggle("active", on);
         return;
       }
       if (target.closest("#addNotificationButton")) { addChannel(); return; }
       if (target.closest("[data-notifications-save]")) { post(payload()); return; }
-      if (target.closest("[data-notifications-reset]")) { post({ action: "reset" }); return; }
+      if (target.closest("[data-notifications-reset]")) { setDirty(false); loading = false; load(); return; }
       if (target.closest("#browserAlertsButton")) enableBrowserAlerts();
     });
     card.addEventListener("input", (event) => {

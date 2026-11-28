@@ -4,7 +4,7 @@
 >
 > **Yahoo Finance · Multi-Strategy · Risk Controlled · Telegram · Supabase Postgres · Dashboard · Strategy Lab**
 
-[![Version](https://img.shields.io/badge/version-3.5.0-111827?style=for-the-badge)](.)
+[![Version](https://img.shields.io/badge/version-3.6.0-111827?style=for-the-badge)](.)
 [![Mode](https://img.shields.io/badge/mode-PAPER-16a34a?style=for-the-badge)](.)
 [![Provider](https://img.shields.io/badge/data-Yahoo%20Finance-7c3aed?style=for-the-badge)](.)
 [![Python](https://img.shields.io/badge/python-3.11%2B-2563eb?style=for-the-badge)](.)
@@ -23,28 +23,24 @@ It is deliberately **paper only**. It does not place live broker orders.
 
 ---
 
-## 🆕 What's New — v3.5.0
+## 🆕 What's New — v3.6.0
 
 **Single source of truth:** `release_notes.py`
 
-- 🔇 Per-sweep scan noise is gone: the 🔎 Scan complete Telegram bubble is now strictly opt-in per channel, and stale, duplicate, reminder, account-limit and MARKET_DATA_ERROR evaluations stay silent while the dashboard and deliveries audit still record every evaluated signal.
-- 🔔 Reminders & trade-close alerts fixed: NotificationService now applies the silence gate only to initial SIGNAL deliveries, preventing REMINDER and TRADE_CLOSED alerts from being suppressed.
-- 📈 GitHub CSV candle cache: 1D/1H/30M candles load from local/GitHub CSV baselines and only tail-fetch recent bars from Yahoo Finance, bypassing Supabase candle storage.
-- ⚡ Render & Supabase bandwidth cuts: dashboard snapshots cache for 180s with stable ETags (304 Not Modified), gzip compression (>=512B), 150-signal history cap, and slower idle polling.
-- 🛠️ Scan error & trade monitor fixes: fixed MARKET_DATA_ERROR alert formatting (UnboundLocalError), null opened_at handling in trade settlement, and split re-download fallback.
-- 🔐 Telegram chat ids are now secrets in the notifications card: the dashboard API redacts every channel target and secret, so a screenshot or API read can no longer expose your chat id.
-- 🛟 The environment-default Telegram channel shows a Default chip instead of Remove, so the last working notification path cannot be deleted by accident, and editing it only changes the chat id.
-- 📱 The notifications card was rebuilt into a compact three-line channel row with a scannable event grid, saving vertical space in Tools.
+- 🎨 Redesigned Mavis Dashboard v2: 3 distinct visual styles (Terminal, Neo Brutalism, Modern glassmorphism), Dark/Light modes, 5 accent-reactive palettes, and 4 background patterns (Plain, Grid, Dots, Glow).
+- 📱 Mobile-first workspace: compact Home product banner, split-pane overview, 5-equal mobile bottom nav, inline compact trade detail expansion, and color-coded Economic Calendar impact cards (High/Medium/Low).
+- 🧪 Backtest Signals & Trades ledger: displays all directional signals generated (Entry/SL/TP + reason) and all completed trades (Entry/Exit/bars + P/L), with collapsible Backtest and Clear controls.
+- 📈 New Engulf 66 SMA 5min strategy & dedicated nifty_5m account (20 daily limit, 10 max trades/asset/day), with period-aware Yahoo candle fetching in backtests.
+- 🔇 Per-sweep scan noise is gone: Scan complete Telegram alerts stay opt-in per channel, while reminders and trade-close notifications remain active.
+- ⚡ Render & Supabase bandwidth cuts: 180s snapshot cache with stable ETags (304), gzip compression (>=512B), 150-signal history cap, and redacted Telegram channel secrets.
 
 ### 🎨 Interface styles
 
-MULTIBOT2 now has three presentation systems using the same application structure:
+MULTIBOT2 v2 provides three distinct presentation styles on the same 5-page SPA (Home, Signals, History, Calendar, Tools), plus Dark/Light themes, 5 accent-reactive palettes (Emerald, Indigo, Amber, Rose, Cyan), and 4 background textures (Plain, Grid, Dots, Glow):
 
-- **Modern** — existing general-purpose dashboard presentation.
-- **Material 3** — Google Material Design 3-inspired semantic color roles, tonal surfaces, typography hierarchy, shape tokens, restrained elevation and component state layers.
-- **Neo Brutalism** — existing high-contrast presentation.
-
-Material 3 is presentation-only. It does not introduce a second DOM, component framework, storage key, API path or trading behavior. The existing `mavis-style` preference is reused, and the existing responsive breakpoints remain authoritative.
+- **Terminal** — Kite × Linear hairline workspace with zero floating cards and dense tabular alignment.
+- **Neo Brutalism** — Space Grotesk typography, `2px` ink borders, `4px` hard offset shadows (paper light / matte charcoal + neon accent shadow dark).
+- **Modern** — Frosted glassmorphism (`backdrop-filter: blur`), `12px` rounded surfaces, and soft ambient elevation.
 
 ## 🧭 Architecture at a glance
 
@@ -502,7 +498,7 @@ For strategy-only work, give it:
 🎨 Presentation separated from trading logic
 ```
 
-**MULTIBOT2 v3.5.0 — modular paper trading with canonical market data, Material 3 presentation and a single release source.** 🚀
+**MULTIBOT2 v3.6.0 — modular paper trading with Mavis Dashboard v2, canonical market data, and a single release source.** 🚀
 
 
 ## Supabase database deployment

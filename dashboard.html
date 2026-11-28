@@ -1,24 +1,278 @@
 <!doctype html>
-<html lang="en" data-theme="light" data-style="modern" data-accent="emerald">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f6f7f9"><meta name="description" content="Mavis MULTIBOT2 paper-trading command center"><title>Mavis · MULTIBOT2</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23047857'/%3E%3Cpath d='M8 23V9l8 9 8-9v14' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"><link rel="stylesheet" href="styles.css?v=20261004-tools-align-v2"><link rel="stylesheet" href="foundation.css?v=20260925-tools-segments-v1"><link rel="stylesheet" href="appearance-overrides.css?v=20261004-tools-edit-v4"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/app-icon.svg"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Mavis"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"></head>
-<body><div class="sr-only" id="dashboardAnnouncer" role="status" aria-live="polite" aria-atomic="true"></div><div class="app">
-<header class="topbar"><a class="brand" href="#overview" aria-label="Mavis home" data-page-link="overview"><span class="brand-mark">M</span><span class="brand-copy"><strong>Mavis</strong><small>MULTIBOT2 · PAPER</small></span></a><div class="header-meta"><span id="versionBadge" class="version-badge">v3.5.0</span><span id="systemStatusBadge" class="status-badge"><i id="systemStatusDot"></i><span id="systemStatus">CONNECTING</span></span><button id="whatsNewButton" class="icon-button" type="button" aria-label="What's new in this release" title="What's new">✦</button><button id="refreshButton" class="icon-button" type="button" aria-label="Refresh dashboard" title="Refresh">↻</button><button id="themeToggle" class="icon-button" type="button" aria-label="Toggle light and dark" title="Toggle theme">◐</button></div></header><nav class="mobile-nav" aria-label="Mobile navigation"><button class="nav-button active" data-page="overview" type="button"><span>⌂</span>Home</button><button class="nav-button" data-page="signals" type="button"><span>◆</span>Signals</button><button class="nav-button" data-page="history" type="button"><span>◷</span>History</button><button class="nav-button" data-page="calendar" type="button"><span>◉</span>Calendar</button><button class="nav-button" data-page="tools" type="button"><span>⚙</span>Tools</button></nav>
-<div id="connectionBanner" class="connection-banner" role="alert" hidden></div>
-<nav class="desktop-nav" aria-label="Primary navigation"><button class="nav-button active" data-page="overview" type="button">⌂ <span>Home</span></button><button class="nav-button" data-page="signals" type="button">◆ <span>Signals</span></button><button class="nav-button" data-page="history" type="button">◷ <span>History</span></button><button class="nav-button" data-page="calendar" type="button">◉ <span>Calendar</span></button><button class="nav-button" data-page="tools" type="button">⚙ <span>Tools</span></button></nav>
-<a class="skip-link" href="#main-content">Skip to main content</a>
-<main id="main-content">
-<section id="page-overview" class="page active" aria-labelledby="overviewTitle"><div class="page-heading"><div><span class="eyebrow">COMMAND CENTER</span><h1 id="overviewTitle">Home</h1><p>Account performance, market activity and the latest trading state.</p></div><div class="clock"><span>IST</span><strong id="marketClock">--:--:--</strong></div></div><article class="hero"><div class="hero-copy"><span class="hero-kicker">MULTIBOT</span><h2 id="heroStatus">Smarter signals. Clearer decisions.</h2><p id="heroText">Monitor markets, discover opportunities and track performance in one place.</p></div><div class="hero-pills"><span id="heroSignalPill">0 ACTIVE SIGNALS</span><span id="heroAssetPill">25 ASSETS WATCHING</span><span id="heroUpdatePill">● CONNECTING</span></div></article><div class="metric-grid four"><article class="metric-card"><span>Account value</span><strong id="overviewAccountValue">—</strong><small>Total paper balance</small></article><article class="metric-card"><span>Total P/L</span><strong id="overviewTotalPnl">—</strong><small>Across completed trades</small></article><article class="metric-card"><span>Open trades</span><strong id="overviewTradeCount">0</strong><small>Currently active</small></article><article class="metric-card"><span>Signals</span><strong id="overviewSignalCount">0</strong><small>Directional records</small></article></div><section class="section-block overview-equity"><div class="section-heading"><div><span class="eyebrow">ACCOUNT PERFORMANCE</span><h2>Equity curve</h2></div><span id="equityCurveRange" class="inline-status">Paper account</span></div><div class="chart-card equity-card"><div class="chart-head"><div><strong>Total account value</strong><small>Starting balance and completed paper-trade P/L over time</small></div><span id="equityCurveValue">—</span></div><div id="equityCurveChart" class="chart-area equity-curve-chart"></div></div></section><section class="section-block overview-risk"><div class="section-heading"><div><span class="eyebrow">RISK CONTROL</span><h2>Locked limits</h2></div><button class="text-button" data-page-link="tools" type="button">View rules →</button></div><div class="metric-grid four"><article class="metric-card"><span>Account</span><strong>₹1,00,000</strong><small>Per account</small></article><article class="metric-card"><span>Risk / trade</span><strong>₹2,000</strong><small>Maximum planned risk</small></article><article class="metric-card"><span>Freshness</span><strong>1 hour</strong><small>Older = stale</small></article><article class="metric-card"><span>Leverage</span><strong>1×</strong><small>No leverage</small></article></div></section><section class="section-block overview-activity"><div class="section-heading"><div><span class="eyebrow">ACTIVITY</span><h2>Signal activity</h2></div><button class="text-button" data-page-link="signals" type="button">View signals →</button></div><div class="chart-card"><div class="chart-head"><div><strong>Signals by day</strong><small>Durable detected BUY / SELL events · last 14 days</small></div><span id="signalChartRange">14 days</span></div><div id="signalActivityChart" class="chart-area"></div></div></section><section class="section-block overview-scan"><div class="section-heading"><div><span class="eyebrow">SCAN TRUTH</span><h2>Latest scan</h2></div><span id="scanSummary" class="inline-status">No completed scan recorded yet.</span></div></section><section class="section-block overview-signals"><div class="section-heading"><div><span class="eyebrow">LIVE STATE</span><h2>Active Signals</h2></div><button class="text-button" data-page-link="signals" type="button">View all →</button></div><div id="overviewSignals" class="stack"><div class="loading-state" role="status"><span class="sr-only">Loading signals…</span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span></div></div></section></section>
-<section id="page-signals" class="page" aria-labelledby="signalsTitle"><div class="page-heading signals-heading"><div><span class="eyebrow">SIGNAL LEDGER</span><h1 id="signalsTitle">Signals</h1><p>Detected BUY and SELL opportunities, grouped by date.</p></div><button id="signalsRefreshButton" class="secondary-button" type="button">↻ Refresh</button></div><section class="signals-workspace"><div class="workspace-heading"><span class="eyebrow">BY DATE</span><span id="signalsResultCount" class="workspace-count">0 signals</span></div><div id="signalsList" class="signals-date-list"><div class="loading-state" role="status"><span class="sr-only">Loading signals…</span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span></div></div></section></section>
-<section id="page-history" class="page" aria-labelledby="historyTitle"><div class="page-heading history-heading"><div><span class="eyebrow">RECORDS</span><h1 id="historyTitle">History</h1><p>Completed paper trades, open positions and runtime scan history — all grouped by date.</p></div><button id="historyRefreshButton" class="secondary-button" type="button">↻ Refresh</button></div><section class="history-workspace history-completed-workspace"><div class="workspace-heading"><span class="eyebrow">COMPLETED TRADES</span><span id="historyResultCount" class="workspace-count">0 trades</span></div><div class="history-summary-grid"><article class="metric-card"><span>Completed</span><strong id="historyClosedCount">0</strong><small>Closed paper trades</small></article><article class="metric-card"><span>Daily P/L</span><strong id="historyDailyPnl">—</strong><small>Latest completed day</small></article><article class="metric-card"><span>Win rate</span><strong id="historyWinRate">—</strong><small>Recorded outcomes</small></article></div><div id="historyList" class="history-date-list"><div class="loading-state" role="status"><span class="sr-only">Loading history…</span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span></div></div></section><section class="history-workspace history-live-workspace"><div class="workspace-heading"><span class="eyebrow">OPEN POSITIONS</span><span class="workspace-count">Live paper state</span></div><div id="historyOpenTrades" class="history-live-list"><div class="loading-state" role="status"><span class="sr-only">Loading open trades…</span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span></div></div></section><section class="history-workspace history-scan-workspace"><div class="workspace-heading"><span class="eyebrow">SCAN HISTORY</span><span class="workspace-count">Persisted runtime runs</span></div><div id="historyScanHistory" class="history-live-list"><div class="loading-state" role="status"><span class="sr-only">Loading scan history…</span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span></div></div></section></section>
-<section id="page-calendar" class="page" aria-labelledby="calendarTitle"><div class="page-heading calendar-heading"><div><span class="eyebrow">MARKET INTELLIGENCE</span><h1 id="calendarTitle">Economic Calendar</h1><p>Today first, then upcoming dates. Every scheduled event is retained and each date can be expanded when needed.</p></div><button id="calendarRefreshButton" class="secondary-button" type="button">↻ Refresh</button></div><section class="calendar-workspace calendar-agenda-workspace"><div class="calendar-agenda-status"><div id="calendarStatus" class="calendar-status"></div><a class="source-link calendar-source" href="https://www.forexfactory.com/calendar" target="_blank" rel="noopener noreferrer">Forex Factory ↗</a></div><div class="calendar-summary-grid" aria-label="Calendar event summary"><article class="metric-card"><span>Upcoming</span><strong id="impactCountall">0</strong><small>All scheduled events</small></article><article class="metric-card impact-summary high"><span>High impact</span><strong id="impactCounthigh">0</strong><small>Potentially market moving</small></article><article class="metric-card impact-summary medium"><span>Medium</span><strong id="impactCountmedium">0</strong><small>Watch list</small></article><article class="metric-card impact-summary low"><span>Low / holiday</span><strong id="impactCountother">0</strong><small>Also retained</small></article></div><div class="calendar-agenda-bar"><span class="eyebrow">UPCOMING BY DATE</span><span id="calendarResultCount" class="workspace-count">0 events</span></div><div id="calendarItems" class="calendar-date-list"><div class="loading-state" role="status"><span class="sr-only">Loading saved calendar…</span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span><span class="skeleton skeleton-row" aria-hidden="true"></span></div></div></section></section>
-<section id="page-tools" class="page" aria-labelledby="toolsTitle"><div class="page-heading tools-heading"><div><span class="eyebrow">SYSTEM WORKSPACE</span><h1 id="toolsTitle">Tools</h1><p>Configure the workspace, run real historical tests and inspect the locked operating state.</p></div></div><div class="tools-layout">
-<section class="tool-card appearance-card tools-appearance"><div class="section-heading"><div><span class="eyebrow">APPEARANCE</span><h2>Workspace settings</h2></div></div><div class="settings-row"><span class="settings-label">Theme</span><div class="settings-inline"><button class="chip-option" data-theme-choice="light" type="button">Light</button><button class="chip-option" data-theme-choice="dark" type="button">Dark</button></div></div><div class="settings-row"><span class="settings-label">Style</span><div class="settings-inline"><button class="chip-option" data-style-choice="modern" type="button">Modern</button><button class="chip-option" data-style-choice="material3" type="button">Material 3</button><button class="chip-option" data-style-choice="neo" type="button">Neo Brutalism</button></div></div><div class="settings-row"><span class="settings-label">Accent</span><div class="settings-inline" aria-label="Accent color"><button class="chip-option" data-accent-choice="emerald" type="button"><i class="appearance-swatch" style="background:#10b981"></i>Emerald</button><button class="chip-option" data-accent-choice="indigo" type="button"><i class="appearance-swatch" style="background:#6366f1"></i>Indigo</button><button class="chip-option" data-accent-choice="amber" type="button"><i class="appearance-swatch" style="background:#f59e0b"></i>Amber</button><button class="chip-option" data-accent-choice="rose" type="button"><i class="appearance-swatch" style="background:#f43f5e"></i>Rose</button><button class="chip-option" data-accent-choice="cyan" type="button"><i class="appearance-swatch" style="background:#06b6d4"></i>Cyan</button></div></div><div class="settings-row"><span class="settings-label">Interface</span><div class="settings-inline"><button class="chip-option settings-toggle" id="compactModeToggle" type="button" aria-pressed="false">Compact</button><button class="chip-option settings-toggle" id="reduceMotionToggle" type="button" aria-pressed="false">Reduce motion</button></div></div><p class="section-note section-foot">Theme and interface style are independent. Material 3 is presentation-only.</p></section>
-<section class="tool-card tool-backtest tool-collapse is-open" data-tool-collapse data-tool-key="backtest"><div class="section-heading" data-tool-toggle><div><span class="eyebrow">BACKTEST</span><h2>Historical backtest</h2></div><span class="tool-tag">Real candles</span><button class="collapse-control" type="button" aria-expanded="false" aria-label="Expand section"></button></div><div class="tool-body"><p class="section-note">Select a strategy, a simple asset name and a period. The server runs the real strategy against Yahoo candles.</p><div class="backtest-controls"><label>Strategy<select id="backtestStrategy"><option value="adaptive_trend">Trend Pulse</option><option value="sweep_v2">Sweep 4H</option></select></label><label>Asset<select id="backtestSymbol"></select></label><label>Period<select id="backtestPeriod"><option value="5d">5 days</option><option value="30d" selected>30 days</option><option value="60d">60 days</option><option value="90d">90 days</option><option value="1y">1 year</option></select></label><button id="runBacktestButton" class="primary-button" type="button">Run backtest</button></div><div id="backtestStatus" class="backtest-status" role="status" aria-live="polite">Choose a strategy, asset and period, then run the historical test.</div><div id="backtestResults" class="backtest-results" hidden></div></div></section>
-<section class="tool-card tool-universe tool-settings tool-collapse" data-tool-collapse data-tool-key="universe"><div class="section-heading" data-tool-toggle><div><span class="eyebrow">MARKETS</span><h2>Assets</h2></div><span class="tool-tag">25 shipped</span><button class="collapse-control" type="button" aria-expanded="false" aria-label="Expand section"></button></div><div class="tool-body"><div id="universeGrid" class="universe-grid"></div><div class="settings-group"><span class="settings-label">Your assets</span><p class="section-note">An added asset plugs into an existing account group, so it routes into the accounts that already trade that group. It cannot invent a new group.</p><div id="settingsAssets"></div><div class="settings-row"><span class="settings-label">Add asset</span><div class="settings-inline"><button id="addAssetButton" class="secondary-button" type="button">+ New asset</button></div></div><div class="settings-actions"><span class="settings-actions-status" data-settings-status>Loading settings…</span><button class="secondary-button" type="button" data-reset-settings>Reset</button><button class="primary-button" type="button" data-save-settings>Save</button></div></div></div></section>
-<section class="tool-card tool-accounts tool-settings tool-collapse" data-tool-collapse data-tool-key="accounts"><div class="section-heading" data-tool-toggle><div><span class="eyebrow">ACCOUNTS</span><h2>Live state and limits</h2></div><button class="collapse-control" type="button" aria-expanded="false" aria-label="Expand section"></button></div><div class="tool-body"><div id="accountsGrid" class="account-grid"></div><div class="settings-group"><span class="settings-label">Limits</span><p class="section-note">Capital, trade cap and risk are editable on every account. Saved on the server, not in this browser, because these decide which account takes a real trade and on how much capital; the four built-in accounts cannot be deleted, and a limit that would let an account size a position it cannot pay for is refused rather than clamped.</p><div id="settingsAccounts"></div><div class="settings-row"><span class="settings-label">Add account</span><div class="settings-inline"><button id="addAccountButton" class="secondary-button" type="button">+ New account</button></div></div><div class="settings-actions"><span class="settings-actions-status" data-settings-status>Loading settings…</span><button class="secondary-button" type="button" data-reset-settings>Reset</button><button class="primary-button" type="button" data-save-settings>Save</button></div></div></div></section>
-<section class="tool-card tool-settings tool-routing tool-collapse" data-tool-collapse data-tool-key="routing"><div class="section-heading" data-tool-toggle><div><span class="eyebrow">ROUTING</span><h2>Session and routing</h2></div><span class="tool-tag" id="settingsSessionTag">Reading…</span><button class="collapse-control" type="button" aria-expanded="false" aria-label="Expand section"></button></div><div class="tool-body"><div class="settings-group settings-session"><span class="settings-label">New York session</span><div class="backtest-controls session-controls"><label>Start<select id="settingsStartHour"></select></label><label>End<select id="settingsEndHour"></select></label><label class="settings-session-live">Right now<select id="settingsNow" disabled></select></label></div></div><div class="settings-group"><div class="settings-group-head"><span class="settings-label">Routing order</span><span class="settings-hint">First match wins · open a row to edit it</span></div><div id="settingsRules"></div></div><div class="settings-actions"><span class="settings-actions-status" data-settings-status>Loading settings…</span><button class="secondary-button" type="button" data-reset-settings>Reset</button><button class="primary-button" type="button" data-save-settings>Save</button></div></div></section>
-<section class="tool-card tool-rules tool-collapse" data-tool-collapse data-tool-key="rules"><div class="section-heading" data-tool-toggle><div><span class="eyebrow">LOCKED RULES</span><h2>Execution contract</h2></div><button class="collapse-control" type="button" aria-expanded="false" aria-label="Expand section"></button></div><div class="tool-body"><div class="rule-list"><div><b>Trend Pulse</b><span>BTC / Gold · 1D · ATR exits · trailing policy</span></div><div><b>Engulf 66 SMA</b><span>1H · 66 SMA · engulfing confirmation · 1.2× ATR SL · 2× ATR TP</span></div><div><b>Sweep 4H</b><span>Two-sided sweep · market entry · sweep extreme SL · 1:2 TP</span></div><div><b>Freshness</b><span>≤ 1 hour fresh · &gt; 1 hour stale</span></div><div><b>Messages</b><span>Initial + one reminder maximum · no third send</span></div><div><b>Persistence</b><span>Supabase when configured · SQLite local fallback</span></div><div><b>Trading mode</b><span>Paper only · 1× leverage</span></div></div></div></section>
-<section class="tool-card tool-settings tool-notifications tool-collapse" data-tool-collapse data-tool-key="notifications"><div class="section-heading" data-tool-toggle><div><span class="eyebrow">NOTIFICATIONS</span><h2>Channels and events</h2></div><span class="tool-tag" id="notificationsTag">Reading…</span><button class="collapse-control" type="button" aria-expanded="false" aria-label="Expand section"></button></div><div class="tool-body"><p class="section-note">Every enabled channel receives the events it subscribes to. Telegram keeps working with nothing saved here. Chat ids, webhook addresses and secrets are stored on the server and are never sent back to this browser.</p><div id="notificationChannels" class="settings-group"></div><div class="settings-row"><span class="settings-label">Add channel</span><div class="settings-inline"><button id="addNotificationButton" class="secondary-button" type="button">+ New channel</button><button id="browserAlertsButton" class="secondary-button" type="button">Enable browser alerts</button></div></div><div class="settings-actions"><span class="settings-actions-status" data-notifications-status>Loading notification settings…</span><button class="secondary-button" type="button" data-notifications-reset>Reset</button><button class="primary-button" type="button" data-notifications-save>Save</button></div></div></section>
+<html lang="en" data-style="terminal" data-theme="dark" data-accent="emerald" data-bg="grid" data-compact="false" data-reduce-motion="false">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Mavis · MULTIBOT2 Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/app-icon.svg" type="image/svg+xml">
+</head>
+<body>
+  <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
 
-</div></section>
-</main></div><div id="releaseModal" class="release-modal" role="dialog" aria-modal="true" aria-labelledby="releaseModalTitle"><div class="release-modal-card"><div class="release-modal-head"><div><span class="eyebrow">WHAT'S NEW</span><h2 id="releaseModalTitle">Release <span id="versionText">v3.5.0</span></h2></div><button id="releaseModalClose" class="icon-button" type="button" aria-label="Close release notes">✕</button></div><ul id="whatsNewList" class="whats-new"></ul></div></div><script src="app.js" defer></script><script src="appearance.js" defer></script><script src="dashboard-live-wiring.js" defer></script><script src="notifications.js" defer></script><script>if("serviceWorker"in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));}</script></body></html>
+  <header class="topbar">
+    <div class="topbar-left">
+      <a class="brand" href="#overview" data-page-link="overview">
+        <span class="brand-mark">M</span>
+        <span class="brand-name">MAVIS</span>
+        <span class="brand-tag">PAPER</span>
+      </a>
+      <span id="ovScanBar" class="ticker-scan">Connecting…</span>
+    </div>
+    <div class="topbar-right">
+      <span id="clockChip" class="mono-chip" title="IST Time">--:--:--</span>
+      <span id="statusPill" class="status-pill"><i class="pulse-dot"></i><span id="statusText">SYNC</span></span>
+      <button id="styleQuickBtn" class="btn-mini" type="button" title="Cycle style: Terminal / Neo Brutalism / Modern">TERM</button>
+      <button id="whatsNewBtn" class="icon-btn" type="button" title="What's new" aria-label="What's new">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.2 5.3L19.5 10l-5.3 2.2L12 17.5l-2.2-5.3L4.5 10l5.3-2.2z"/></svg>
+      </button>
+      <button id="refreshBtn" class="icon-btn" type="button" title="Refresh" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+      </button>
+      <button id="themeBtn" class="icon-btn" type="button" title="Toggle light/dark" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="connBanner" class="conn-banner" hidden></div>
+
+  <div class="shell">
+    <nav class="rail" aria-label="Primary navigation">
+      <button class="nav-btn active" data-page="overview" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Home</span>
+      </button>
+      <button class="nav-btn" data-page="signals" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Signals</span>
+      </button>
+      <button class="nav-btn" data-page="history" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+        <span>History</span>
+      </button>
+      <button class="nav-btn" data-page="calendar" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>Calendar</span>
+      </button>
+      <button class="nav-btn" data-page="tools" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1.02 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Tools</span>
+      </button>
+    </nav>
+
+    <main id="main">
+      <!-- HOME: Split-pane Kite x Linear workspace -->
+      <section id="page-overview" class="page active">
+        <div class="home-banner">
+          <div class="banner-left">
+            <div class="banner-eyebrow">MULTIBOT2 · PAPER EXECUTION ENGINE</div>
+            <h1 class="banner-title">Mavis Terminal</h1>
+            <p class="banner-sub">4 strategies · 25-asset universe · 5 isolated books · live Yahoo candles</p>
+          </div>
+          <div class="banner-right">
+            <div class="banner-stat">
+              <small>PORTFOLIO</small>
+              <strong id="bannerEquity" class="mono">—</strong>
+            </div>
+            <button class="btn primary" data-page-link="tools" type="button">Backtest →</button>
+          </div>
+        </div>
+
+        <div class="kpi-bar">
+          <div class="kpi-item"><small>EQUITY</small><strong id="ovEquity">—</strong></div>
+          <div class="kpi-item"><small>NET P/L</small><strong id="ovPnl">—</strong></div>
+          <div class="kpi-item"><small>OPEN</small><strong id="ovOpen">0</strong></div>
+          <div class="kpi-item"><small>SIGNALS</small><strong id="ovSignals">0</strong></div>
+        </div>
+
+        <div class="split-pane">
+          <div class="pane-main">
+            <div class="pane-section">
+              <div class="sec-head">
+                <span><b>Equity Curve</b><small id="ovEqSub">Paper books</small></span>
+                <strong id="ovEqVal" class="mono">—</strong>
+              </div>
+              <div id="ovEqChart" class="chart-box"></div>
+            </div>
+
+            <div class="pane-section">
+              <div class="sec-head">
+                <span><b>Account Books</b><small>5 isolated ledgers</small></span>
+                <button class="link-btn" data-page-link="tools" type="button">Limits →</button>
+              </div>
+              <div id="ovAccounts" class="ledger-table"></div>
+            </div>
+          </div>
+
+          <div class="pane-side">
+            <div class="pane-section">
+              <div class="sec-head">
+                <span><b>Open Positions</b><small id="ovOpenSub">Live</small></span>
+                <button class="link-btn" data-page-link="history" type="button">History →</button>
+              </div>
+              <div id="ovOpenList" class="ledger-list"></div>
+            </div>
+
+            <div class="pane-section">
+              <div class="sec-head">
+                <span><b>Active Signals</b><small>Fresh ≤ 1h</small></span>
+                <button class="link-btn" data-page-link="signals" type="button">All →</button>
+              </div>
+              <div id="ovSigList" class="ledger-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rule-footer">
+          <span>1× Leverage</span>·<span>₹2,000 Base Risk</span>·<span>1h Freshness</span>·<span>25 Assets</span>·<span>4 Strategies</span>
+        </div>
+      </section>
+
+      <!-- SIGNALS -->
+      <section id="page-signals" class="page">
+        <div class="page-bar">
+          <div><h2>Signals</h2><small id="sigCount">0 signals</small></div>
+          <button class="btn" id="sigRefreshBtn" type="button">↻ Refresh</button>
+        </div>
+        <div id="sigList" class="group-stack"></div>
+      </section>
+
+      <!-- HISTORY -->
+      <section id="page-history" class="page">
+        <div class="page-bar">
+          <div><h2>History</h2><small id="histSummary">0 trades</small></div>
+          <button class="btn" id="histRefreshBtn" type="button">↻ Refresh</button>
+        </div>
+        <div class="kpi-bar three">
+          <div class="kpi-item"><small>CLOSED</small><strong id="histClosed">0</strong></div>
+          <div class="kpi-item"><small id="histDailyLbl">DAY P/L</small><strong id="histDailyPnl">—</strong></div>
+          <div class="kpi-item"><small>WIN RATE</small><strong id="histWinRate">—</strong></div>
+        </div>
+        <div class="seg-tabs" id="histTabs" role="tablist">
+          <button class="seg-btn active" data-hist-tab="open" type="button">Open <span id="histOpenCount">0</span></button>
+          <button class="seg-btn" data-hist-tab="closed" type="button">Closed <span id="histClosedTabCount">0</span></button>
+          <button class="seg-btn" data-hist-tab="scans" type="button">Scans <span id="histScanCount">0</span></button>
+        </div>
+        <div id="histPanelOpen" class="group-stack"></div>
+        <div id="histPanelClosed" class="group-stack" hidden></div>
+        <div id="histPanelScans" class="group-stack" hidden></div>
+      </section>
+
+      <!-- CALENDAR -->
+      <section id="page-calendar" class="page">
+        <div class="page-bar">
+          <div><h2>Calendar</h2><small id="calStatusText">Loading…</small></div>
+          <button class="btn" id="calRefreshBtn" type="button">↻ Refresh</button>
+        </div>
+        <div class="cal-filters">
+          <input id="calDate" class="date-input" type="date" aria-label="Calendar date">
+          <div class="chip-row" id="calImpactChips">
+            <button class="chip active" data-impact="All" type="button">All</button>
+            <button class="chip" data-impact="High" type="button">High</button>
+            <button class="chip" data-impact="Medium" type="button">Medium</button>
+            <button class="chip" data-impact="Low" type="button">Low</button>
+          </div>
+        </div>
+        <div class="kpi-bar">
+          <div class="kpi-item"><small>ALL</small><strong id="calAll">0</strong></div>
+          <div class="kpi-item"><small>HIGH</small><strong id="calHigh" class="neg">0</strong></div>
+          <div class="kpi-item"><small>MEDIUM</small><strong id="calMed" class="warn">0</strong></div>
+          <div class="kpi-item"><small>LOW/HOL</small><strong id="calLow">0</strong></div>
+        </div>
+        <div id="calList" class="group-stack"></div>
+      </section>
+
+      <!-- TOOLS -->
+      <section id="page-tools" class="page">
+        <div class="page-bar">
+          <div><h2>Tools</h2><small>Style, Backtest & System State</small></div>
+          <span class="ro-badge">Public Read-Only</span>
+        </div>
+
+        <details class="pane-section boxed">
+          <summary class="sec-head clickable"><b>Appearance</b><small id="appearSummary">Terminal · Dark · Emerald · Grid</small></summary>
+          <div class="tool-grid">
+            <div class="tool-row"><span>Style</span><div class="chip-row"><button class="chip" data-style-set="terminal" type="button">Terminal</button><button class="chip" data-style-set="neo" type="button">Neo Brutalism</button><button class="chip" data-style-set="modern" type="button">Modern</button></div></div>
+            <div class="tool-row"><span>Theme</span><div class="chip-row"><button class="chip" data-theme-set="dark" type="button">Dark</button><button class="chip" data-theme-set="light" type="button">Light</button></div></div>
+            <div class="tool-row"><span>Accent</span><div class="chip-row"><button class="chip" data-accent-set="emerald" type="button">Emerald</button><button class="chip" data-accent-set="indigo" type="button">Indigo</button><button class="chip" data-accent-set="amber" type="button">Amber</button><button class="chip" data-accent-set="rose" type="button">Rose</button><button class="chip" data-accent-set="cyan" type="button">Cyan</button></div></div>
+            <div class="tool-row"><span>Background</span><div class="chip-row"><button class="chip" data-bg-set="plain" type="button">Plain</button><button class="chip" data-bg-set="grid" type="button">Grid</button><button class="chip" data-bg-set="dots" type="button">Dots</button><button class="chip" data-bg-set="glow" type="button">Glow</button></div></div>
+            <div class="tool-row"><span>Density & Motion</span><div class="chip-row"><button class="chip" id="compactBtn" type="button">Compact</button><button class="chip" id="motionBtn" type="button">Reduce motion</button></div></div>
+          </div>
+        </details>
+
+        <details class="pane-section boxed" open>
+          <summary class="sec-head clickable"><b>Historical Backtest</b><small>Real Yahoo candles</small></summary>
+          <div>
+            <div class="bt-form">
+              <select id="btStrategy" aria-label="Strategy"></select>
+              <select id="btSymbol" aria-label="Asset"></select>
+              <select id="btPeriod" aria-label="Period">
+                <option value="5d">5 days</option>
+                <option value="30d" selected>30 days</option>
+                <option value="60d">60 days</option>
+                <option value="90d">90 days</option>
+                <option value="1y">1 year</option>
+              </select>
+              <div style="display:flex;gap:6px">
+                <button id="btRunBtn" class="btn primary" type="button" style="flex:1">Run</button>
+                <button id="btClearBtn" class="btn" type="button" hidden>Clear</button>
+              </div>
+            </div>
+            <div id="btStatus" class="muted-note" style="margin-top:8px">Select strategy, asset and period to test.</div>
+            <div id="btResults" hidden></div>
+          </div>
+        </details>
+
+        <details class="pane-section boxed">
+          <summary class="sec-head clickable"><b>Accounts & Limits</b><small id="toolsAcctCount">5 books</small></summary>
+          <div id="toolsAccounts" class="ledger-list"></div>
+        </details>
+
+        <details class="pane-section boxed">
+          <summary class="sec-head clickable"><b>Routing & NY Session</b><small id="toolsSessionTag">—</small></summary>
+          <div id="toolsRouting" class="ledger-list"></div>
+        </details>
+
+        <details class="pane-section boxed">
+          <summary class="sec-head clickable"><b>Notifications</b><small id="toolsNotifyTag">—</small></summary>
+          <div id="toolsNotify" class="ledger-list"></div>
+        </details>
+
+        <details class="pane-section boxed">
+          <summary class="sec-head clickable"><b>Strategies & 25-Asset Universe</b><small id="toolsStratCount">4 strategies</small></summary>
+          <div id="toolsContract" class="ledger-list"></div>
+        </details>
+      </section>
+    </main>
+  </div>
+
+  <!-- Slide-up Trade Detail Drawer -->
+  <div id="drawerBackdrop" class="drawer-backdrop" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true">
+      <div class="sec-head">
+        <b id="drawerTitle">Trade Detail</b>
+        <button id="drawerClose" class="icon-btn" type="button" aria-label="Close">✕</button>
+      </div>
+      <div id="drawerBody"></div>
+    </aside>
+  </div>
+
+  <!-- What's New Modal -->
+  <div id="whatsNewBackdrop" class="drawer-backdrop" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true">
+      <div class="sec-head">
+        <b id="whatsNewTitle">What's New</b>
+        <button id="whatsNewClose" class="icon-btn" type="button" aria-label="Close">✕</button>
+      </div>
+      <ul id="whatsNewList" class="whats-list"></ul>
+    </aside>
+  </div>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
