@@ -289,3 +289,37 @@ def test_persisted_daily_cache_survives_provider_cooldown_but_has_a_hard_bound()
     assert restored is not None
     assert abs(restored[1] - 8 * 60 * 60) < 2
     assert expired is None
+
+
+
+def test_fetch_uses_bounded_persisted_candles_during_provider_backoff():
+    class CacheDatabase:
+        def load_market_data_cache(self, cache_key):
+            now = pd.Timestamp.now(tz="UTC")
+            frame = pd.DataFrame(
+                {"open": [100.0], "high": [101.0], "low": [99.0], "close": [100.5]},
+                index=pd.DatetimeIndex([now - pd.Timedelta(minutes=30)]).tz_convert("Asia/Kolkata"),
+            )
+            payload = json.dumps({
+                "columns": list(frame.columns),
+                "index": [x.isoformat() for x in frame.index],
+                "data": frame.values.tolist(),
+            }, separators=(",", ":"))
+            return {
+                "payload": yahoo_provider.CACHE_PAYLOAD_PREFIX + base64.b64encode(
+                    zlib.compress(payload.encode("utf-8"))
+                ).decode("ascii"),
+                "updated_at": (now - pd.Timedelta(minutes=30)).isoformat(),
+            }
+
+    provider = yahoo_provider.YahooProvider(database=CacheDatabase())
+    provider._activate_backoff("BTC-USD", "test_provider_cooldown")
+    provenance = {}
+    result = provider.fetch(
+        "BTC-USD", period="30d", interval="30m",
+        validate_hourly=False, provenance=provenance,
+    )
+
+    assert len(result) == 1
+    assert provenance["source"] == "stale_fallback"
+    assert provider.in_backoff("BTC-USD")
