@@ -240,8 +240,21 @@ async function loadTools() {
     const list = allowed.size ? all.filter((a) => allowed.has(a.key) || allowed.has(a.ticker)) : all;
     $("btSymbol").innerHTML = list.map((a) => `<option value="${esc(a.key || a.ticker)}">${esc(a.label)}</option>`).join("");
   };
+  const setBacktestPeriods = () => {
+    const choices = {
+      adaptive_trend: [["2y", "2 years (required history)"]],
+      engulfing_66_sma: [["60d", "60 days (strategy history)"]],
+      engulfing_66_sma_5m: [["5d", "5 days"], ["1mo", "1 month"], ["30d", "30 days"], ["60d", "60 days (maximum)"]]
+    };
+    const defaults = [["5d", "5 days"], ["30d", "30 days"], ["60d", "60 days"], ["90d", "90 days"], ["1y", "1 year"]];
+    const options = choices[$("btStrategy").value] || defaults;
+    const previous = $("btPeriod").value;
+    $("btPeriod").innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+    $("btPeriod").value = options.some(([value]) => value === previous) ? previous : options[0][0];
+  };
   fillBtSymbols();
-  $("btStrategy").onchange = fillBtSymbols;
+  setBacktestPeriods();
+  $("btStrategy").onchange = () => { fillBtSymbols(); setBacktestPeriods(); };
 
   const accts = d.accounts?.data || [];
   $("toolsAcctCount").textContent = `${accts.length} books`;
@@ -280,7 +293,9 @@ async function runBacktest() {
     const r = await fetch(`/api/backtest?${qs}`, { cache: "no-store" });
     const res = await r.json();
     if (!res.ok) throw new Error(res.error || "Backtest failed");
-    $("btStatus").textContent = `${res.strategy} · ${res.symbol} · ${res.period} · ${res.candle_count} candles`;
+    const requestedNote = res.requested_period && res.requested_period !== res.period ? ` · requested ${res.requested_period}, actual ${res.period}` : "";
+    const dataRange = res.data_start && res.data_end ? ` · ${tsFmt(res.data_start)} → ${tsFmt(res.data_end)}` : "";
+    $("btStatus").textContent = `${res.strategy} · ${res.symbol} · ${res.period} · ${res.candle_count} candles${requestedNote}${dataRange}`;
     const m = res.metrics || {};
     const sigs = Array.isArray(res.signals) ? res.signals : [];
     const trades = Array.isArray(res.trades) ? res.trades : [];
