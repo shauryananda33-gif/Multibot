@@ -5,13 +5,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_dashboard_history_has_live_trade_and_scan_surfaces():
     html = (ROOT / "dashboard.html").read_text(encoding="utf-8")
-    bridge = (ROOT / "dashboard-live-wiring.js").read_text(encoding="utf-8")
-    assert 'id="historyOpenTrades"' in html
-    assert 'id="historyScanHistory"' in html
-    assert 'dashboard-live-wiring.js' in html
-    assert 'data.style' not in bridge
-    assert '/api/dashboard' in bridge
-    assert 'status||""' in bridge
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'id="histPanelOpen"' in html
+    assert 'id="histPanelScans"' in html
+    assert "function renderHistory()" in app
+    assert 'fetch("/api/dashboard"' in app
+    assert "scan_history" in app
 
 
 def test_dashboard_trade_serializer_preserves_operational_fields():

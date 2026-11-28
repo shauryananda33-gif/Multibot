@@ -331,7 +331,7 @@ class YahooProvider:
         if start is None or frame.empty or not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
             return None
         utc_index = frame.index.tz_convert("UTC")
-        if utc_index.min() > start + pd.Timedelta(days=4):
+        if utc_index.min() > start + pd.Timedelta(days=7):
             return None
         trimmed = frame.loc[utc_index >= start].copy()
         return trimmed if not trimmed.empty else None

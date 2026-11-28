@@ -14,7 +14,7 @@ The project is a **paper-trading multi-strategy engine**. Preserve the locked ru
 
 ```text
 Project: MULTIBOT2
-Version: 3.5.0
+Version: 3.6.0
 Mode: PAPER ONLY
 Market data: Yahoo Finance ONLY
 Timezone: Asia/Kolkata
@@ -82,11 +82,12 @@ Do not expand the live universe without an explicit project decision.
 
 # 3. Accounts
 
-Four independent account buckets exist:
+Five independent account buckets exist:
 
 ```text
 macro       limit 20
 nifty       limit 5
+nifty_5m    limit 20 (10 per asset/day)
 ny_session  limit 3
 sweep_4h    limit 3
 ```
@@ -1044,7 +1045,7 @@ If one of those files needs a change for every new strategy, the architecture ha
 # 29. Current release
 
 ```text
-MULTIBOT2 v3.5.0
+MULTIBOT2 v3.6.0
 
 🧩 Automatic strategy discovery
 🧠 Trend Pulse (adaptive_trend)

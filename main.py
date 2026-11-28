@@ -930,7 +930,14 @@ def build_app():
             name,typ=files[path]
             try: body=open(os.path.join(root,name),"rb").read()
             except OSError: start("404 Not Found",[("Content-Type","text/plain")]); return [b"Not found"]
-            cache_control="no-store" if path in ("/","/dashboard","/sw.js") else "public, max-age=3600"
+            if path in ("/","/dashboard","/sw.js"):
+                cache_control="no-store"
+            elif path.endswith((".js",".css")):
+                # Revalidate executable and presentation assets after every deploy.
+                # A one-hour cache can leave mobile clients running mismatched files.
+                cache_control="no-cache, max-age=0, must-revalidate"
+            else:
+                cache_control="public, max-age=3600"
             return _send_compressed(env,start,"200 OK",[("Content-Type",typ),("Cache-Control",cache_control)],body)
         start("404 Not Found",[("Content-Type","text/plain")]); return [b"Not found"]
     return app

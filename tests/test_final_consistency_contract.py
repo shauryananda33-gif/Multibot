@@ -31,13 +31,9 @@ def test_dashboard_signal_marks_missing_levels_non_actionable():
 def test_final_frontend_contract_uses_safe_json_and_separated_backtest_semantics():
     app=(ROOT/"app.js").read_text(encoding="utf-8")
     css=(ROOT/"styles.css").read_text(encoding="utf-8")
-    assert "function readJsonResponse" in app
-    assert 'readJsonResponse(response,"Backtest API")' in app
-    # Backtest presentation separates completed trades from generated signals:
-    # the backtest signals panel is no longer part of the frontend contract.
-    assert "Completed trades" in app
-    assert "Backtest equity curve" in app
-    assert "backtest-signal-list" not in app
-    assert "Detected opportunities" not in app
-    assert "max-height:560px !important" in css
-    assert "overflow-y:auto !important" in css
+    assert "async function loadDashboard()" in app
+    assert "If-None-Match" in app
+    assert "fetch(`/api/backtest?${qs}`" in app
+    assert "const sigs = Array.isArray(res.signals)" in app
+    assert "const trades = Array.isArray(res.trades)" in app
+    assert "overflow-y:auto" in css

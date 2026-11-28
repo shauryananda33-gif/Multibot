@@ -87,6 +87,7 @@ def test_built_in_account_values_are_preserved():
     assert default_settings()["accounts"] == [
         {"name": "macro", "starting_balance": 100_000, "daily_trade_limit": 20, "risk_per_trade": 2_000},
         {"name": "nifty", "starting_balance": 100_000, "daily_trade_limit": 5, "risk_per_trade": 2_000},
+        {"name": "nifty_5m", "starting_balance": 100_000, "daily_trade_limit": 20, "risk_per_trade": 2_000},
         {"name": "ny_session", "starting_balance": 100_000, "daily_trade_limit": 3, "risk_per_trade": 2_000},
         {"name": "sweep_4h", "starting_balance": 100_000, "daily_trade_limit": 3, "risk_per_trade": 2_000},
     ]

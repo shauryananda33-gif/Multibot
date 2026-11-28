@@ -111,3 +111,11 @@ class Strategy(ABC):
         """Backtests must use the same candle-preparation contract as live scans."""
         prepared = self.prepare_candles(symbol, candles, now=now)
         return self.generate_signal(symbol, prepared, now=now)
+
+    def backtest_signals(self, symbol: str, candles: pd.DataFrame) -> list[Signal] | None:
+        """Optional one-pass historical signals aligned to input candle indices.
+
+        Return None to retain the reference prefix-by-prefix implementation.
+        Batch implementations must preserve prepare_candles completion rules.
+        """
+        return None

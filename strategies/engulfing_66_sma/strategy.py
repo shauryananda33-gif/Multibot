@@ -21,9 +21,6 @@ IST = "Asia/Kolkata"
 class Engulfing66SMA(Strategy):
     """Closed-candle engulfing entries around a 66-period SMA."""
 
-    _timeframe_label = "1H"
-    _candle_delta = pd.Timedelta(hours=1)
-
     manifest = StrategyManifest(
         id="engulfing_66_sma",
         name="Engulf 66 SMA",
@@ -95,9 +92,9 @@ class Engulfing66SMA(Strategy):
         atr = cls._wilder_rma(true_range, cfg["atr_length"])
         return sma, atr
 
-    @classmethod
-    def _completed_only(cls, frame: pd.DataFrame, now: pd.Timestamp, timeframe: str) -> pd.DataFrame:
-        if frame.empty or timeframe not in {"1h", "5m"}:
+    @staticmethod
+    def _completed_only(frame: pd.DataFrame, now: pd.Timestamp, timeframe: str) -> pd.DataFrame:
+        if frame.empty or timeframe != "1h":
             return frame
         current = pd.Timestamp(now)
         if current.tzinfo is None:
@@ -109,7 +106,7 @@ class Engulfing66SMA(Strategy):
         if data.index.tz is None:
             raise ValueError("Engulfing 66 SMA candle timestamps must be timezone-aware")
         last = data.index[-1].tz_convert(IST)
-        if last + cls._candle_delta > current:
+        if last + pd.Timedelta(hours=1) > current:
             return data.iloc[:-1]
         return data
 
@@ -163,13 +160,56 @@ class Engulfing66SMA(Strategy):
             return True, "BEARISH_ENGULFING_AT_66_SMA", diagnostics
         return False, "NO_APPROVED_SETUP", diagnostics
 
+    def backtest_signals(self, symbol: str, candles: pd.DataFrame) -> list[Signal]:
+        """Calculate SMA/ATR once, then classify completed historical bars."""
+        cfg = self.validate_config({})
+        frame = candles.copy().sort_index()
+        count = len(frame)
+        if not count:
+            return []
+        sma, atr = self._indicators(frame, cfg)
+        minimum = max(cfg["sma_length"] + cfg["slope_length"] + 2, cfg["atr_length"] + 2, 3)
+        last_signal_index = -10**9
+        result = []
+        for slot in range(count):
+            # confirm_only excludes the bar stamped at the backtest timestamp.
+            index = slot - 1 if cfg["confirm_only"] else slot
+            timestamp = frame.index[index] if index >= 0 else frame.index[slot]
+            if index < 0 or index + 1 < minimum:
+                result.append(Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL",
+                                     timestamp, "1H", "INSUFFICIENT_DATA",
+                                     metadata={"candle_count": max(0, index + 1), "required": minimum}))
+                continue
+            approved, reason, diagnostics = self._signal_at(
+                frame, index, cfg=cfg, sma=sma, atr=atr, last_signal_index=last_signal_index
+            )
+            if approved:
+                last_signal_index = index
+                direction = "BUY" if reason.startswith("BULLISH") else "SELL"
+                entry = float(frame["close"].iloc[index])
+                atr_value = float(diagnostics["atr"])
+                stop_distance = cfg["stop_atr"] * atr_value
+                target_distance = stop_distance * cfg["target_r"]
+                if direction == "BUY":
+                    stop_loss, take_profit = entry - stop_distance, entry + target_distance
+                else:
+                    stop_loss, take_profit = entry + stop_distance, entry - target_distance
+                diagnostics.update({"entry": entry, "stop_loss": stop_loss, "take_profit": take_profit,
+                                    "risk_reward": cfg["target_r"], "risk_inr": 2000.0, "target_inr": 4000.0})
+                result.append(Signal(self.manifest.name, self.manifest.version, symbol, direction,
+                                     timestamp, "1H", reason, entry, stop_loss, take_profit, diagnostics))
+            else:
+                result.append(Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL",
+                                     timestamp, "1H", reason, metadata=diagnostics))
+        return result
+
     def generate_signal(self, symbol: str, candles: pd.DataFrame, *, now: pd.Timestamp) -> Signal:
         cfg = self.validate_config({})
         frame = candles.copy().sort_index()
         timestamp = frame.index[-1] if len(frame) else pd.Timestamp(now)
         minimum = max(cfg["sma_length"] + cfg["slope_length"] + 2, cfg["atr_length"] + 2, 3)
         if len(frame) < minimum:
-            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, self._timeframe_label, "INSUFFICIENT_DATA", metadata={"candle_count": len(frame), "required": minimum})
+            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, "1H", "INSUFFICIENT_DATA", metadata={"candle_count": len(frame), "required": minimum})
         sma, atr = self._indicators(frame, cfg)
         last_signal_index = -10**9
         final_direction, final_reason, final_metadata = "NO_SIGNAL", "NO_APPROVED_SETUP", {}
@@ -184,7 +224,7 @@ class Engulfing66SMA(Strategy):
             elif index == len(frame) - 1:
                 final_reason, final_metadata = reason, diagnostics
         if final_direction == "NO_SIGNAL":
-            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, self._timeframe_label, final_reason, metadata=final_metadata)
+            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, "1H", final_reason, metadata=final_metadata)
         entry = float(frame["close"].iloc[-1])
         atr_value = float(final_metadata["atr"])
         stop_distance = cfg["stop_atr"] * atr_value
@@ -194,4 +234,4 @@ class Engulfing66SMA(Strategy):
         else:
             stop_loss, take_profit = entry + stop_distance, entry - target_distance
         final_metadata.update({"entry": entry, "stop_loss": stop_loss, "take_profit": take_profit, "risk_reward": cfg["target_r"], "risk_inr": 2000.0, "target_inr": 4000.0})
-        return Signal(self.manifest.name, self.manifest.version, symbol, final_direction, timestamp, self._timeframe_label, final_reason, entry, stop_loss, take_profit, final_metadata)
+        return Signal(self.manifest.name, self.manifest.version, symbol, final_direction, timestamp, "1H", final_reason, entry, stop_loss, take_profit, final_metadata)

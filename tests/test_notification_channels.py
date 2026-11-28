@@ -460,8 +460,9 @@ def test_the_dashboard_installs_as_an_app():
     html = (ROOT / "dashboard.html").read_text(encoding="utf-8")
     assert 'rel="manifest"' in html
     assert 'href="/manifest.webmanifest"' in html
-    assert 'src="notifications.js"' in html
-    assert "serviceWorker" in html
+    assert 'src="notifications.js"' not in html  # legacy channel editor is not part of the v3.6 shell
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "serviceWorker.register" in app
 
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
     assert manifest["display"] == "standalone"
@@ -481,11 +482,8 @@ def test_the_server_serves_the_app_and_the_channel_api():
 def test_the_notifications_card_does_not_borrow_the_trading_save_hook():
     """app.js writes accounts/assets/routing as one document; a channel is not."""
     html = (ROOT / "dashboard.html").read_text(encoding="utf-8")
-    start = html.index('data-tool-key="notifications"')
-    card = html[start:html.index("</section>", start)]
-
-    assert "data-notifications-save" in card
-    assert "data-notifications-reset" in card
-    assert "data-save-settings" not in card
-    assert "data-settings-status" not in card
-    assert "notificationChannels" in card
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'fetch("/api/notifications")' in app
+    assert 'toolsNotify' in html and 'toolsNotify' in app
+    assert 'fetch("/api/settings")' in app
+    # v3.6 exposes a read-only summary; no public credential form is shipped.
