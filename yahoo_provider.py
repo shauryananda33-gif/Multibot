@@ -262,7 +262,7 @@ class YahooProvider:
         )
         return trimmed
 
-    _CSV_INTERVALS = frozenset({"30m", "1h", "1d"})
+    _CSV_INTERVALS = frozenset({"5m", "30m", "1h", "1d"})
 
     @staticmethod
     def _csv_filename(symbol: str, interval: str) -> str:

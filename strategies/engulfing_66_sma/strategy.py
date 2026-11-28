@@ -178,7 +178,7 @@ class Engulfing66SMA(Strategy):
             timestamp = frame.index[index] if index >= 0 else frame.index[slot]
             if index < 0 or index + 1 < minimum:
                 result.append(Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL",
-                                     timestamp, "1H", "INSUFFICIENT_DATA",
+                                     timestamp, str(self.manifest.timeframes[0]).upper(), "INSUFFICIENT_DATA",
                                      metadata={"candle_count": max(0, index + 1), "required": minimum}))
                 continue
             approved, reason, diagnostics = self._signal_at(
@@ -198,10 +198,10 @@ class Engulfing66SMA(Strategy):
                 diagnostics.update({"entry": entry, "stop_loss": stop_loss, "take_profit": take_profit,
                                     "risk_reward": cfg["target_r"], "risk_inr": 2000.0, "target_inr": 4000.0})
                 result.append(Signal(self.manifest.name, self.manifest.version, symbol, direction,
-                                     timestamp, "1H", reason, entry, stop_loss, take_profit, diagnostics))
+                                     timestamp, str(self.manifest.timeframes[0]).upper(), reason, entry, stop_loss, take_profit, diagnostics))
             else:
                 result.append(Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL",
-                                     timestamp, "1H", reason, metadata=diagnostics))
+                                     timestamp, str(self.manifest.timeframes[0]).upper(), reason, metadata=diagnostics))
         return result
 
     def generate_signal(self, symbol: str, candles: pd.DataFrame, *, now: pd.Timestamp) -> Signal:
@@ -210,7 +210,7 @@ class Engulfing66SMA(Strategy):
         timestamp = frame.index[-1] if len(frame) else pd.Timestamp(now)
         minimum = max(cfg["sma_length"] + cfg["slope_length"] + 2, cfg["atr_length"] + 2, 3)
         if len(frame) < minimum:
-            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, "1H", "INSUFFICIENT_DATA", metadata={"candle_count": len(frame), "required": minimum})
+            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, str(self.manifest.timeframes[0]).upper(), "INSUFFICIENT_DATA", metadata={"candle_count": len(frame), "required": minimum})
         sma, atr = self._indicators(frame, cfg)
         last_signal_index = -10**9
         final_direction, final_reason, final_metadata = "NO_SIGNAL", "NO_APPROVED_SETUP", {}
@@ -225,7 +225,7 @@ class Engulfing66SMA(Strategy):
             elif index == len(frame) - 1:
                 final_reason, final_metadata = reason, diagnostics
         if final_direction == "NO_SIGNAL":
-            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, "1H", final_reason, metadata=final_metadata)
+            return Signal(self.manifest.name, self.manifest.version, symbol, "NO_SIGNAL", timestamp, str(self.manifest.timeframes[0]).upper(), final_reason, metadata=final_metadata)
         entry = float(frame["close"].iloc[-1])
         atr_value = float(final_metadata["atr"])
         stop_distance = cfg["stop_atr"] * atr_value
@@ -235,4 +235,4 @@ class Engulfing66SMA(Strategy):
         else:
             stop_loss, take_profit = entry + stop_distance, entry - target_distance
         final_metadata.update({"entry": entry, "stop_loss": stop_loss, "take_profit": take_profit, "risk_reward": cfg["target_r"], "risk_inr": 2000.0, "target_inr": 4000.0})
-        return Signal(self.manifest.name, self.manifest.version, symbol, final_direction, timestamp, "1H", final_reason, entry, stop_loss, take_profit, final_metadata)
+        return Signal(self.manifest.name, self.manifest.version, symbol, final_direction, timestamp, str(self.manifest.timeframes[0]).upper(), final_reason, entry, stop_loss, take_profit, final_metadata)

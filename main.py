@@ -260,7 +260,19 @@ def _backtest_payload(strategy,symbol,period):
     _require_runtime_leader()
     ensure_runtime(); key=strategy.strip().lower(); st=REGISTRY.get(key); symbol=symbol.strip().upper()
     if symbol not in st.manifest.assets and key not in EXTRA_ASSET_STRATEGIES.get(symbol, ()): raise ValueError(f"{key} does not support {symbol}")
-    frame=SERVICE.engine.fetch(st,symbol,period=period)
+    interval,data_period=st.data_request(symbol,period=period)
+    provenance={}
+    frame=SERVICE.engine.fetch(st,symbol,period=period,provenance=provenance)
+    if frame is None or frame.empty:
+        raise ValueError(
+            f"No historical candles returned for {symbol} at {interval}. "
+            "Yahoo may be rate-limited or the requested history may be unavailable; retry later."
+        )
+    if not isinstance(frame.index,pd.DatetimeIndex) or frame.index.tz is None:
+        raise ValueError("Backtest data must contain timezone-aware candle timestamps")
+    frame=frame.sort_index()
+    if frame.index.has_duplicates:
+        raise ValueError("Backtest data contains duplicate candle timestamps")
     # Backtests route on the same table as live dispatch, so a backtest of an
     # asset is charged to the account that would actually trade it.
     account=resolve_account(key,LIVE_ASSET_MAP[symbol],pd.Timestamp.now(tz=IST_TIMEZONE),st.manifest.account)
@@ -288,7 +300,7 @@ def _backtest_payload(strategy,symbol,period):
     for trade in result.trades:
         equity += float(trade.pnl)
         equity_curve.append({"timestamp": trade.timestamp.isoformat(), "equity": round(equity, 2)})
-    return {"ok":True,"strategy":result.strategy,"strategy_id":st.manifest.id,"strategy_version":result.strategy_version,"symbol":symbol,"asset":LIVE_ASSET_MAP[symbol].label,"period":period,"parameters":result.parameters,"candle_count":len(frame),"buy_signals":buy_signals,"sell_signals":sell_signals,"trades_taken":trades_taken,"planned_risk":planned_risk,"equity_curve":equity_curve,"metrics":{"return_pct":m.return_pct,"max_drawdown_pct":m.max_drawdown_pct,"sharpe":m.sharpe,"sortino":m.sortino,"win_rate_pct":m.win_rate_pct,"profit_factor":m.profit_factor,"number_of_trades":m.number_of_trades,"average_trade":m.average_trade,"max_losing_streak":m.max_losing_streak,"exposure_pct":m.exposure_pct,"risk_adjusted_performance":m.risk_adjusted_performance,"rating":m.rating,"rating_label":m.rating_label,"breakdown":m.breakdown},"daily":[{"date":d,**v} for d,v in sorted(daily.items())],"signals":signals,"trades":[{"timestamp":x.timestamp.isoformat(),"direction":x.direction,"entry":x.entry,"exit":x.exit,"pnl":x.pnl,"bars_held":x.bars_held} for x in result.trades][-200:],"generated_at":now().isoformat()}
+    return {"ok":True,"strategy":result.strategy,"strategy_id":st.manifest.id,"strategy_version":result.strategy_version,"symbol":symbol,"asset":LIVE_ASSET_MAP[symbol].label,"period":data_period,"requested_period":period,"data_interval":interval,"data_start":frame.index[0].isoformat(),"data_end":frame.index[-1].isoformat(),"data_source":provenance.get("source"),"data_age_seconds":provenance.get("age_seconds"),"parameters":result.parameters,"candle_count":len(frame),"buy_signals":buy_signals,"sell_signals":sell_signals,"trades_taken":trades_taken,"planned_risk":planned_risk,"equity_curve":equity_curve,"metrics":{"return_pct":m.return_pct,"max_drawdown_pct":m.max_drawdown_pct,"sharpe":m.sharpe,"sortino":m.sortino,"win_rate_pct":m.win_rate_pct,"profit_factor":m.profit_factor,"number_of_trades":m.number_of_trades,"average_trade":m.average_trade,"max_losing_streak":m.max_losing_streak,"exposure_pct":m.exposure_pct,"risk_adjusted_performance":m.risk_adjusted_performance,"rating":m.rating,"rating_label":m.rating_label,"breakdown":m.breakdown},"daily":[{"date":d,**v} for d,v in sorted(daily.items())],"signals":signals,"trades":[{"timestamp":x.timestamp.isoformat(),"direction":x.direction,"entry":x.entry,"exit":x.exit,"pnl":x.pnl,"bars_held":x.bars_held} for x in result.trades][-200:],"generated_at":now().isoformat()}
 def _scan_error_alert_state(strategy_ids, entries=None):
     """Persisted incident rows for the dashboard's scan diagnostics (no secrets).
 
