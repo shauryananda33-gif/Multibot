@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-11-28 (Session 3b) — Live Dashboard & UX/UI Max Audit
+
+### Summary
+- Audited live deployment `https://multibot-3hsb.onrender.com/` (desktop `1440×900` + mobile `390×844` + all 3 themes + all Tools settings).
+- Saved full report to **[docs/UI_UX_MAX_AUDIT.md](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/docs/UI_UX_MAX_AUDIT.md)**.
+- Key bugs found for next fix pass: `dashboard-live-wiring.js` `₹` prefix on Forex Entry, `app.js`/`dashboard.html` missing `nifty_5m` label & `Engulf 66 SMA 5min` in Locked Rules, `notifications.js` missing `.active` class on event chips & `[REDACTED]` prefill, `Engulfing66SMA5m.data_request()` ignoring `period="30d"` in Backtest, and `Save`/`+ New`/`Reset` UX on read-only public dashboard.
+
+---
+
 ## 2026-11-28 (Session 3) — `Engulf 66 SMA 5min` + Dedicated `nifty_5m` Account
 
 ### Summary
