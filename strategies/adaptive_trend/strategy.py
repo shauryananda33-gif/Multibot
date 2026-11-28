@@ -94,6 +94,56 @@ class AdaptiveTrendMomentum(Strategy):
             sl, tp, direction = e+distance, e-distance*cfg["reward_risk"], "SELL"
             reason = "EMA_MOMENTUM_DONCHIAN_SHORT"
         return Signal(self.manifest.name,self.manifest.version,symbol,direction,ts,"1D",reason,e,sl,tp,{"atr":a,"momentum":float(momentum.iloc[-1]),"volatility_pct":float(vol_pct.iloc[-1])})
+    def backtest_signals(self, symbol, candles):
+        """Compute causal daily signals with one indicator pass.
+
+        At candle i's timestamp, prepare_candles excludes the still-forming
+        daily bar labelled i, so the equivalent input is candles through i-1.
+        """
+        cfg = self.validate_config({})
+        f = candles.copy().sort_index()
+        count = len(f)
+        if not count:
+            return []
+        close = f.close.astype(float)
+        fast = close.ewm(span=cfg["ema_fast"], adjust=False).mean()
+        slow = close.ewm(span=cfg["ema_slow"], adjust=False).mean()
+        momentum = close / close.shift(cfg["momentum_period"]) - 1
+        upper = f.high.shift(1).rolling(cfg["donchian_period"]).max()
+        lower = f.low.shift(1).rolling(cfg["donchian_period"]).min()
+        atr = _atr(f, cfg["atr_period"])
+        vol_pct = atr / close * 100
+        minimum = max(cfg["ema_slow"], cfg["momentum_period"], cfg["donchian_period"] + 1, cfg["atr_period"]) + 2
+        result = []
+        for i in range(count):
+            j = i - 1
+            ts = f.index[j] if j >= 0 else f.index[i]
+            if j + 1 < minimum:
+                result.append(Signal(self.manifest.name,self.manifest.version,symbol,"NO_SIGNAL",ts,"1D","INSUFFICIENT_DATA"))
+                continue
+            e = float(close.iloc[j])
+            a = float(atr.iloc[j]) if pd.notna(atr.iloc[j]) else float("nan")
+            if (pd.isna(fast.iloc[j]) or pd.isna(slow.iloc[j]) or pd.isna(momentum.iloc[j])
+                    or pd.isna(upper.iloc[j]) or pd.isna(lower.iloc[j]) or not pd.notna(a)):
+                result.append(Signal(self.manifest.name,self.manifest.version,symbol,"NO_SIGNAL",ts,"1D","INDICATOR_DATA_UNAVAILABLE"))
+                continue
+            if float(vol_pct.iloc[j]) < cfg["volatility_min_pct"]:
+                result.append(Signal(self.manifest.name,self.manifest.version,symbol,"NO_SIGNAL",ts,"1D","VOLATILITY_FILTER"))
+                continue
+            long_ok = fast.iloc[j] > slow.iloc[j] and momentum.iloc[j] > 0 and e > upper.iloc[j]
+            short_ok = fast.iloc[j] < slow.iloc[j] and momentum.iloc[j] < 0 and e < lower.iloc[j]
+            if not (long_ok or short_ok):
+                result.append(Signal(self.manifest.name,self.manifest.version,symbol,"NO_SIGNAL",ts,"1D","NO_APPROVED_ALIGNMENT",e))
+                continue
+            distance = a * cfg["stop_atr"]
+            if long_ok:
+                sl, tp, direction, reason = e-distance, e+distance*cfg["reward_risk"], "BUY", "EMA_MOMENTUM_DONCHIAN_LONG"
+            else:
+                sl, tp, direction, reason = e+distance, e-distance*cfg["reward_risk"], "SELL", "EMA_MOMENTUM_DONCHIAN_SHORT"
+            result.append(Signal(self.manifest.name,self.manifest.version,symbol,direction,ts,"1D",reason,e,sl,tp,
+                                 {"atr":a,"momentum":float(momentum.iloc[j]),"volatility_pct":float(vol_pct.iloc[j])}))
+        return result
+
     def trailing_policy(self, config=None):
         cfg = self.validate_config(config or {})
         return {"enabled": bool(cfg["trailing_stop"]), "type":"atr", "atr_multiple":float(cfg["trailing_atr"])}
