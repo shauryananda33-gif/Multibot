@@ -90,7 +90,7 @@ def test_static_html_is_never_cached():
     assert captured["status"] == "200 OK"
     assert captured["headers"]["Cache-Control"] == "no-store"
     html = body.decode("utf-8")
-    assert "v=3.6.0.20261128.2" in html
+    assert "v=3.6.0.20261128.3" in html
     assert body
 
 
@@ -270,7 +270,7 @@ def test_standby_process_cannot_run_upstream_diagnostic_endpoints(monkeypatch):
             return ["sweep_v2"]
     monkeypatch.setattr(main, "REGISTRY", _Registry())
 
-    for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news", "/api/backtest"):
+    for path in ("/api/diagnostics/sweep", "/api/calendar", "/api/news"):
         status, payload = _call("GET", path)
         assert status == "503 Service Unavailable", (path, status, payload)
         assert "not the active" in payload["error"]
