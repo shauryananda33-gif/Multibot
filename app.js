@@ -20,6 +20,7 @@ const state = {
   calDate: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
   calImpact: "All",
   settings: null,
+  dashboardLoading: false,
 };
 
 function applyPrefs() {
@@ -374,33 +375,58 @@ function openTradeDrawer(idx, btn) {
 }
 
 async function loadDashboard() {
+  // The minute poll, manual refresh and retry button share one in-flight request.
+  if (state.dashboardLoading) return;
+  state.dashboardLoading = true;
   try {
     const hdr = state.etag ? { "If-None-Match": state.etag } : {};
     const r = await fetch("/api/dashboard", { cache: "no-store", headers: hdr });
-    if (r.status === 304) { $("statusText").textContent = "ONLINE"; $("statusPill").classList.remove("offline"); return; }
+    if (r.status === 304) {
+      $("statusText").textContent = "ONLINE";
+      $("statusPill").classList.remove("offline");
+      $("connBanner").hidden = true;
+      return;
+    }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const etag = r.headers.get("ETag"); if (etag) state.etag = etag;
-    state.data = await r.json();
+    const etag = r.headers.get("ETag");
+    if (etag) state.etag = etag;
+    const payload = await r.json();
+    if (!payload || payload.ok === false) throw new Error(payload?.error || "Dashboard data unavailable");
+    state.data = payload;
     $("statusText").textContent = "ONLINE";
     $("statusPill").classList.remove("offline");
     $("connBanner").hidden = true;
-    renderOverview(); renderSignals(); renderHistory();
+    renderOverview();
+    renderSignals();
+    renderHistory();
     if (state.page === "tools") loadTools();
   } catch (e) {
     $("statusText").textContent = "OFFLINE";
     $("statusPill").classList.add("offline");
-    $("connBanner").textContent = `Connection issue: ${e.message}`;
-    $("connBanner").hidden = false;
+    const banner = $("connBanner");
+    banner.replaceChildren(document.createTextNode(`Connection issue: ${e.message} `));
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.id = "dashboardRetryBtn";
+    retry.className = "btn-mini";
+    retry.textContent = "Retry";
+    banner.append(retry);
+    banner.hidden = false;
+  } finally {
+    state.dashboardLoading = false;
   }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   applyPrefs();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   $("calDate").value = state.calDate;
   const tick = () => { $("clockChip").textContent = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()); };
   tick(); setInterval(tick, 1000);
 
   document.addEventListener("click", (e) => {
+    const retry = e.target.closest("#dashboardRetryBtn");
+    if (retry) { loadDashboard(); return; }
     const nav = e.target.closest("[data-page],[data-page-link]");
     if (nav) { e.preventDefault(); setPage(nav.dataset.page || nav.dataset.pageLink); return; }
     const ht = e.target.closest("[data-hist-tab]");

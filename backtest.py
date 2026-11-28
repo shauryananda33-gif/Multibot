@@ -60,9 +60,17 @@ def _simulate(frame, strategy, symbol, account):
     signals=[]; trades=[]; equity=account.starting_balance; peak=equity; max_dd=0; exposure_bars=0
     current_day=None; day_trades=0; next_eligible=0
     f=frame.sort_index(); asset=LIVE_ASSET_MAP[symbol]; fx_rate=1.0 if asset.currency=="INR" else USD_TO_INR
+    # Batch-capable strategies calculate historical indicators once. Others
+    # retain the reference prefix-by-prefix implementation below.
+    precomputed = strategy.backtest_signals(symbol, f)
     for i in range(max(2,50),len(f)):
         if i < next_eligible: continue
-        prefix=f.iloc[:i+1]; ts=f.index[i]; signal=strategy.backtest_signal(symbol,prefix,now=ts); signals.append(signal)
+        ts=f.index[i]
+        if precomputed is not None:
+            signal=precomputed[i]
+        else:
+            prefix=f.iloc[:i+1]; signal=strategy.backtest_signal(symbol,prefix,now=ts)
+        signals.append(signal)
         if not signal.is_directional or signal.stop_loss is None or signal.take_profit is None: continue
         day=ts.tz_convert("Asia/Kolkata").date() if ts.tzinfo else ts.date()
         if day!=current_day: current_day=day; day_trades=0

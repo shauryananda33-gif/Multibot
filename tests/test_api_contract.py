@@ -56,7 +56,7 @@ SIGNAL_COMPUTED_FIELDS = [
     "has_trade_levels", "actionable",
 ]
 
-STYLES = ["modern", "material3", "neo"]
+STYLES = ["terminal", "neo", "modern"]
 ACCENTS = ["emerald", "indigo", "amber", "rose", "cyan"]
 THEMES = ["light", "dark"]
 
@@ -245,14 +245,15 @@ def test_theme_doc_covers_all_thirty_combinations():
 
 def test_appearance_js_options_match_the_documented_axis():
     """STYLES/ACCENTS in appearance.js define the axis; the doc must agree."""
-    source = APPEARANCE.read_text(encoding="utf-8")
-    styles = re.search(r"const STYLES=\[([^\]]*)\]", source)
-    accents = re.search(r"const ACCENTS=\[([^\]]*)\]", source)
-    assert styles and accents, "appearance.js axis definitions not found"
-    parsed_styles = re.findall(r'"([^"]+)"', styles.group(1))
-    parsed_accents = re.findall(r'"([^"]+)"', accents.group(1))
-    assert parsed_styles == STYLES
-    assert parsed_accents == ACCENTS
+    html = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    for style in STYLES:
+        assert f'data-style-set="{style}"' in html
+        assert style in app
+    for accent in ACCENTS:
+        assert f'data-accent-set="{accent}"' in html
+    for theme in THEMES:
+        assert f'data-theme-set="{theme}"' in html
 
 
 def test_theme_attributes_are_present_on_the_html_element():
@@ -262,7 +263,7 @@ def test_theme_attributes_are_present_on_the_html_element():
     assert tag, "<html> element not found in dashboard.html"
     element = tag.group(0)
     for attribute, default in (
-        ("data-theme", "light"), ("data-style", "modern"), ("data-accent", "emerald")
+        ("data-theme", "dark"), ("data-style", "terminal"), ("data-accent", "emerald")
     ):
         assert f'{attribute}="{default}"' in element, (
             f"<html> must ship {attribute}=\"{default}\" as the server-rendered default"
@@ -273,8 +274,8 @@ def test_contrast_tokens_are_declared_only_by_the_base_sheet():
     """Load-bearing invariant: a later sheet redefining a contrast token breaks
     exactly one style/accent/theme combination. See THEME_SYSTEM.md §1."""
     contrast_tokens = (
-        "--positive", "--negative", "--warning",
-        "--accent", "--on-accent", "--accent-fill",
+        "--base-bg", "--base-surface", "--text", "--muted",
+        "--accent", "--accent-fg", "--pos", "--neg", "--warn",
     )
     for sheet in ("foundation.css", "appearance-overrides.css"):
         text = (ROOT / sheet).read_text(encoding="utf-8")

@@ -367,7 +367,7 @@ def test_csv_baseline_serves_fresh_and_merges_incremental_tail(tmp_path, monkeyp
 
     def fake_tail_download(symbol, **kwargs):
         requested_periods.append(kwargs.get("period"))
-        idx = pd.DatetimeIndex([base_index[-1], now]).tz_convert("UTC")
+        idx = pd.DatetimeIndex([base_index[-1].tz_convert("UTC"), now]).tz_convert("UTC")
         return pd.DataFrame(
             {"Open": [100.0, 103.0], "High": [102.0, 105.0], "Low": [99.0, 102.0], "Close": [101.0, 104.0]},
             index=idx,

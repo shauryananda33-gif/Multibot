@@ -1,7 +1,7 @@
 # API Contract — MULTIBOT2
 
 **Status:** authoritative. Derived from `main.py`, `dashboard.py`, `signal_lifecycle.py`
-and `db.py` at **v3.5.0**. Guarded by `tests/test_api_contract.py`.
+and `db.py` at **v3.6.0**. Guarded by `tests/test_api_contract.py`.
 
 **Why this file exists.** The server is a hand-rolled `wsgiref` application with
 routing written inline in `main.py::web_server().app()`. There is no OpenAPI
@@ -21,7 +21,9 @@ This document is the seam. A new front end may be written against this file alon
 | Port | `PORT` env var, default `10000` |
 | JSON content type | `application/json; charset=utf-8` |
 | JSON cache header | `Cache-Control: no-store` |
-| Static cache header | `Cache-Control: no-store` |
+| Static HTML cache header | `Cache-Control: no-store` |
+| Static JS/CSS cache header | `Cache-Control: public, max-age=3600` (build-versioned URLs) |
+| Other static assets | `Cache-Control: public, max-age=3600` |
 | Serialization | `json.dumps(payload, default=str)` — **non-serializable values are stringified, never dropped** |
 | Auth | Dashboard pages and all read APIs (`/api/dashboard`, `/api/diagnostics/sweep`, `/api/calendar`, `/api/news`, `/api/backtest`, `GET /api/settings`, `GET /api/notifications`) are public to same-origin requests. Cross-origin requests receive **403** `CROSS_ORIGIN`. `POST /api/settings` and `POST /api/notifications` are disabled on the public dashboard (**403 Forbidden**). Public `/ping` and `/api/health` expose liveness/keepalive facts. |
 | CORS | None. Same-origin only; the configuration endpoints enforce it server-side. |
@@ -211,8 +213,8 @@ Built by `dashboard.py::build_dashboard_snapshot()`.
   }],
 
   "accounts": {
-    "count": 4,
-    "names": ["macro", "nifty", "ny_session", "sweep_4h"],
+    "count": 5,
+    "names": ["macro", "nifty", "nifty_5m", "ny_session", "sweep_4h"],
     "data": [{
       "name": "macro",
       "starting_balance": 100000.0,
@@ -530,7 +532,7 @@ all non-GET requests are currently rejected with **403 Forbidden**
     "rules":    [{"account": "macro", "strategies": ["adaptive_trend", "engulfing_66_sma"],
                   "asset_groups": ["Global Markets"], "in_ny_session": false}],
     "options":  {"account_groups": ["NSE Stocks", "NSE Indices", "Global Markets"],
-                 "strategies": ["adaptive_trend", "engulfing_66_sma", "sweep_v2"],
+                 "strategies": ["adaptive_trend", "engulfing_66_sma", "engulfing_66_sma_5m", "sweep_v2"],
                  "strategy_names": {"sweep_v2": "Sweep 4H"},
                  "asset_types": ["equity", "index", "commodity", "crypto", "forex"],
                  "currencies": ["INR", "USD"],
@@ -554,7 +556,7 @@ all non-GET requests are currently rejected with **403 Forbidden**
  "settings": { /* the configuration still in force */ }}
 ```
 
-**What an operator may change.** The four built-in accounts (`macro`, `nifty`,
+**What an operator may change.** The five built-in accounts (`macro`, `nifty`, `nifty_5m`,
 `ny_session`, `sweep_4h`) and the 25 shipped assets are the shipped contract:
 they keep their values and cannot be deleted. Everything else is free — add an
 account with its own capital, daily limit and risk; add an asset to an

@@ -61,7 +61,37 @@ def test_dashboard_snapshot_supports_conditional_requests(monkeypatch):
 
 def test_registry_is_strategy_driven():
     main.ensure_runtime()
-    assert set(main.REGISTRY.ids()) == {"adaptive_trend", "sweep_v2", "engulfing_66_sma"}
+    assert set(main.REGISTRY.ids()) == {"adaptive_trend", "sweep_v2", "engulfing_66_sma", "engulfing_66_sma_5m"}
+
+
+
+def test_static_javascript_and_css_assets_are_cached_by_versioned_url():
+    app = main.build_app()
+    for path in ("/app.js", "/styles.css", "/foundation.css", "/appearance-overrides.css"):
+        captured = {}
+        body = b"".join(app({
+            "PATH_INFO": path, "REQUEST_METHOD": "GET",
+            "HTTP_HOST": "localhost:3000", "CONTENT_LENGTH": "0",
+            "wsgi.input": io.BytesIO(b""),
+        }, lambda status, headers: captured.update(status=status, headers=dict(headers))))
+        assert captured["status"] == "200 OK"
+        assert captured["headers"]["Cache-Control"] == "public, max-age=3600"
+        assert body
+
+
+def test_static_html_is_never_cached():
+    app = main.build_app()
+    captured = {}
+    body = b"".join(app({
+        "PATH_INFO": "/", "REQUEST_METHOD": "GET",
+        "HTTP_HOST": "localhost:3000", "CONTENT_LENGTH": "0",
+        "wsgi.input": io.BytesIO(b""),
+    }, lambda status, headers: captured.update(status=status, headers=dict(headers))))
+    assert captured["status"] == "200 OK"
+    assert captured["headers"]["Cache-Control"] == "no-store"
+    html = body.decode("utf-8")
+    assert "v=3.6.0.20261128.2" in html
+    assert body
 
 
 def test_ping_contract_exists():
@@ -301,8 +331,8 @@ def test_dashboard_reports_the_actual_supabase_database_backend(monkeypatch):
 def test_dashboard_etag_ignores_generated_at_and_supports_gzip(monkeypatch):
     import gzip
 
-    first_payload = {"ok": True, "generated_at": "2026-11-26T10:00:00+05:30", "signals": [{"id": i} for i in range(40)]}
-    second_payload = {"ok": True, "generated_at": "2026-11-26T10:05:00+05:30", "signals": [{"id": i} for i in range(40)]}
+    first_payload = {"ok": True, "generated_at": "2026-11-26T10:00:00+05:30", "signals": [{"id": i, "symbol": "GC=F", "direction": "BUY", "timestamp": "2026-11-26T10:00:00+05:30", "reason": "fixture"} for i in range(100)]}
+    second_payload = {"ok": True, "generated_at": "2026-11-26T10:05:00+05:30", "signals": [{"id": i, "symbol": "GC=F", "direction": "BUY", "timestamp": "2026-11-26T10:00:00+05:30", "reason": "fixture"} for i in range(100)]}
     monkeypatch.setattr(main, "snapshot", lambda: first_payload)
     status, headers, _ = _call_dashboard_with_headers()
     assert status == "200 OK"

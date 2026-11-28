@@ -1,5 +1,12 @@
-MULTIBOT2 v3.5.0
+MULTIBOT2 v3.6.0
 ================
+
+Accounts
+- macro: 20 daily trades.
+- nifty: 5 daily trades.
+- nifty_5m: 20 daily trades; max 10 per asset/day.
+- ny_session: 3 daily trades.
+- sweep_4h: 3 daily trades.
 
 Architecture
 - Automatic strategy discovery under strategies/.
@@ -11,6 +18,7 @@ Architecture
 Built-in strategies
 - Trend Pulse 1.0.0 (adaptive_trend): 2 assets, 1D.
 - Engulf 66 SMA 1.0.2 (engulfing_66_sma): 25 assets, 1h.
+- Engulf 66 SMA 5min 1.0.0 (engulfing_66_sma_5m): NIFTY indices, 5m.
 - Sweep 4H 2.1.0 (sweep_v2): 25 assets, 1h/4h canonical sweep schedules.
 
 Locked rules

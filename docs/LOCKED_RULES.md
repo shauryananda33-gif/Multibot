@@ -9,7 +9,7 @@ Values are asserted against `config.py` by `tests/test_config.py`,
 **Rules 3, 4 and 5 are now *defaults*, not constants.** An operator can add
 assets and accounts, and change any account's capital, daily limit or risk, from
 Tools → Accounts, assets and routing. What stays locked is the *shipped* set:
-the 25 built-in assets, the four built-in accounts and their default values are
+the 25 built-in assets, the five built-in accounts and their default values are
 never overwritten, and every account must still satisfy the bounds in
 `config.py` (`ACCOUNT_MIN_*` / `ACCOUNT_MAX_*`) and fund its own daily risk
 budget. Reset-to-defaults always returns to the values in `config.py`.
@@ -88,13 +88,14 @@ DEFAULT_RISK_PER_TRADE_INR = 2_000     # risk budget for a new account
 LEVERAGE                   = 1.0
 ```
 
-Four accounts **ship**, each with a daily trade cap and a daily planned-risk
+Five accounts **ship**, each with a daily trade cap and a daily planned-risk
 cap. These are the defaults an operator can change, not hardcoded constants:
 
 | Account | Daily trade limit | Default size | Default risk | Owner |
 |---|---|---|---|---|
 | `macro` | 20 | ₹100,000 | ₹2,000 | `adaptive_trend`, `engulfing_66_sma` |
 | `nifty` | 5 | ₹100,000 | ₹2,000 | — |
+| `nifty_5m` | 20 | ₹100,000 | ₹2,000 | `engulfing_66_sma_5m` |
 | `ny_session` | 3 | ₹100,000 | ₹2,000 | — |
 | `sweep_4h` | 3 | ₹100,000 | ₹2,000 | `sweep_v2` |
 

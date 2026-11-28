@@ -930,7 +930,12 @@ def build_app():
             name,typ=files[path]
             try: body=open(os.path.join(root,name),"rb").read()
             except OSError: start("404 Not Found",[("Content-Type","text/plain")]); return [b"Not found"]
-            cache_control="no-store" if path in ("/","/dashboard","/sw.js") else "public, max-age=3600"
+            if path in ("/","/dashboard","/sw.js"):
+                cache_control="no-store"
+            else:
+                # JS/CSS URLs carry a build-specific query token in dashboard.html.
+                # Cache for an hour to save bandwidth; each deploy changes that token.
+                cache_control="public, max-age=3600"
             return _send_compressed(env,start,"200 OK",[("Content-Type",typ),("Cache-Control",cache_control)],body)
         start("404 Not Found",[("Content-Type","text/plain")]); return [b"Not found"]
     return app
