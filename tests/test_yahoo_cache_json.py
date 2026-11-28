@@ -252,7 +252,7 @@ def test_persisted_cache_stale_retention_is_candle_interval_aware():
     )._restore_persisted(("BTC-USD", "1d", "1m", False))
 
     assert intraday is not None
-    assert intraday[1] == pytest.approx(30 * 60, abs=2)
+    assert abs(intraday[1] - 30 * 60) < 2
     assert quote is None
 
 
@@ -287,5 +287,5 @@ def test_persisted_daily_cache_survives_provider_cooldown_but_has_a_hard_bound()
     )._restore_persisted(("GC=F", "2y", "1d", False))
 
     assert restored is not None
-    assert restored[1] == pytest.approx(8 * 60 * 60, abs=2)
+    assert abs(restored[1] - 8 * 60 * 60) < 2
     assert expired is None
