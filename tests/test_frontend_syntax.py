@@ -34,6 +34,8 @@ def test_dashboard_references_only_existing_current_shell_assets():
     assert "styles.css" in assets
     assert "foundation.css" in assets
     assert "appearance-overrides.css" in assets
+    local_asset_versions = re.findall(r'(?:app\.js|styles\.css|foundation\.css|appearance-overrides\.css)\?v=([^"]+)', html)
+    assert len(local_asset_versions) == 4 and len(set(local_asset_versions)) == 1
 
 
 def test_stylesheets_load_in_the_v36_cascade_order():

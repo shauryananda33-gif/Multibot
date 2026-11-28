@@ -65,7 +65,7 @@ def test_registry_is_strategy_driven():
 
 
 
-def test_static_javascript_and_css_assets_are_revalidated_after_deploy():
+def test_static_javascript_and_css_assets_are_cached_by_versioned_url():
     app = main.build_app()
     for path in ("/app.js", "/styles.css", "/foundation.css", "/appearance-overrides.css"):
         captured = {}
@@ -89,6 +89,8 @@ def test_static_html_is_never_cached():
     }, lambda status, headers: captured.update(status=status, headers=dict(headers))))
     assert captured["status"] == "200 OK"
     assert captured["headers"]["Cache-Control"] == "no-store"
+    html = body.decode("utf-8")
+    assert "v=3.6.0.20261128.2" in html
     assert body
 
 

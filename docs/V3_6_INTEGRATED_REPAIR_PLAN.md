@@ -7,7 +7,7 @@
 | Order | Files | Dependency / contract | Planned change |
 |---|---|---|---|
 | 1. Release identity | `release_notes.py`, `pyproject.toml`, `MANIFEST.txt`, `WHATS_NEW.md`, `README.md`, `AI_REBUILD_SPEC.md` | `release_notes.APP_VERSION` is canonical; package, manifest and reconstruction spec must agree | Keep canonical version at 3.6.0; correct packaging metadata, shipped strategy inventory and five-account inventory |
-| 2. Browser shell | `dashboard.html`, `main.py`, `styles.css`, `foundation.css`, `appearance-overrides.css` | HTML references static paths served by `main.build_app()`; CSS cascade order is base theme → geometry → appearance overrides | Load all three existing CSS layers in the approved order; cache JS/CSS with revalidation rather than a one-hour stale window; keep HTML and live API responses non-cacheable |
+| 2. Browser shell | `dashboard.html`, `main.py`, `styles.css`, `foundation.css`, `appearance-overrides.css` | HTML references static paths served by `main.build_app()`; CSS cascade order is base theme → geometry → appearance overrides | Load all three existing CSS layers in the approved order; cache JS/CSS for one hour using build-versioned URLs so deploys invalidate old assets without repeated downloads; keep HTML and live API responses non-cacheable |
 | 3. Dashboard runtime | `dashboard.html`, `app.js`, `main.py`, `dashboard.py` | `app.js` calls same-origin read-only `/api/dashboard`; server builds snapshot; frontend renders overview/signals/history | Verify every required DOM ID exists, response/error paths are explicit, initial fetch and manual retry work, and periodic refresh does not overlap or leave the page stuck in CONNECTING |
 | 4. Account and strategy inventory | `config.py`, `bot_settings.py`, `strategies/registry.py`, `docs/LOCKED_RULES.md`, `MANIFEST.txt`, account/registry tests | Config is source of truth for built-in books and strategy registry is source of truth for shipped strategy IDs | Document/test all five built-in books and four shipped strategies, including `nifty_5m` and `engulfing_66_sma_5m`; preserve account limits and routing |
 | 5. Historical backtest | `backtest.py`, `strategies/base.py`, strategy-specific `strategy.py`, `yahoo_provider.py`, PR #12 and parity tests | Batch signals must equal prefix-by-prefix reference signals; simulation owns trade ordering, sizing, limits and stop/target tie-breaking | Rebase/evaluate PR #12 on current v3.6.0; retain only parity-proven batch paths; keep Sweep on reference path until equivalent semantics are proven |
@@ -27,7 +27,7 @@
 ## Acceptance criteria
 
 1. Package, manifest, docs and runtime all identify v3.6.0.
-2. The HTML loads the intended CSS layers in order and static assets revalidate after a deploy.
+2. The HTML loads the intended CSS layers in order; JS/CSS build tokens change on deploy while retaining efficient one-hour caching.
 3. All public viewing pages open without a token; same-origin read-only dashboard data returns successfully; cross-origin reads remain rejected.
 4. Every dashboard selector used by `app.js` exists in the served HTML; JavaScript parses; failed initial loads show a usable retry path.
 5. All five built-in accounts and four built-in strategies are represented consistently.

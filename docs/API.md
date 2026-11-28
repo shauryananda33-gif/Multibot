@@ -22,7 +22,7 @@ This document is the seam. A new front end may be written against this file alon
 | JSON content type | `application/json; charset=utf-8` |
 | JSON cache header | `Cache-Control: no-store` |
 | Static HTML cache header | `Cache-Control: no-store` |
-| Static JS/CSS cache header | `Cache-Control: no-cache, max-age=0, must-revalidate` |
+| Static JS/CSS cache header | `Cache-Control: public, max-age=3600` (build-versioned URLs) |
 | Other static assets | `Cache-Control: public, max-age=3600` |
 | Serialization | `json.dumps(payload, default=str)` — **non-serializable values are stringified, never dropped** |
 | Auth | Dashboard pages and all read APIs (`/api/dashboard`, `/api/diagnostics/sweep`, `/api/calendar`, `/api/news`, `/api/backtest`, `GET /api/settings`, `GET /api/notifications`) are public to same-origin requests. Cross-origin requests receive **403** `CROSS_ORIGIN`. `POST /api/settings` and `POST /api/notifications` are disabled on the public dashboard (**403 Forbidden**). Public `/ping` and `/api/health` expose liveness/keepalive facts. |
