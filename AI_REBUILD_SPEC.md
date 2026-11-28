@@ -1088,6 +1088,16 @@ Engulf 66 SMA 1.0.2
                  data_request() asks for 1h/60d. Signals are emitted only on
                  completed candles.
 
+Engulf 66 SMA 5min 1.0.0
+    id           engulfing_66_sma_5m
+    timeframes   5m
+    assets       2 (^NSEI, ^NSEBANK)
+    account      nifty_5m
+    schedule     completed_candle
+    parameters   same as engulfing_66_sma + max_trades_per_asset 10
+    notes        data_request() asks for 5m/5d. Dedicated nifty_5m account
+                 (₹100,000, ₹2,000 risk, limit 20 total / 10 per asset).
+
 Sweep 4H 2.1.0
     id           sweep_v2
     timeframes   1h, 4h

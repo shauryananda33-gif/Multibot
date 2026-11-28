@@ -147,6 +147,7 @@ See `STRATEGY_DEVELOPER_GUIDE.md` for the exact workflow.
 | 🧠 Trend Pulse | BTC-USD, GC=F | 1D | Trend + momentum + breakout |
 | 🔎 Sweep 4H | 25-asset universe | Asset/schedule-defined | Liquidity sweep classification |
 | 🕯️ Engulf 66 SMA | Live asset universe | 1H | Engulfing entries around the 66 SMA |
+| ⚡ Engulf 66 SMA 5min | NIFTY 50, BANK NIFTY | 5M | 5-minute index engulfing around 66 SMA (ifty_5m, 10 trades/asset/day) |
 
 Strategies are identified by stable IDs such as `adaptive_trend` and `sweep_v2`, while human-readable names and versions are carried separately.
 
@@ -172,8 +173,9 @@ Strategies are identified by stable IDs such as `adaptive_trend` and `sweep_v2`,
 ```text
 macro       20
 nifty        5
+nifty_5m    20  (max 10 per asset: ^NSEI, ^NSEBANK)
 ny_session   3
-sweep_4h    3
+sweep_4h     3
 ```
 
 These are **core safety rules**. Strategy configuration cannot bypass them.
@@ -418,7 +420,8 @@ MULTIBOT2/
 │   ├── registry.py            # automatic discovery
 │   ├── _template/             # new-strategy starter
 │   ├── adaptive_trend/        # Trend Pulse
-│   ├── engulfing_66_sma/      # Engulf 66 SMA
+│   ├── engulfing_66_sma/      # Engulf 66 SMA (1H)
+│   ├── engulfing_66_sma_5m/   # Engulf 66 SMA 5min (NIFTY/BANKNIFTY)
 │   └── sweep_v2/              # Sweep 4H plug-in
 │
 ├── tests/                     # canonical test suite

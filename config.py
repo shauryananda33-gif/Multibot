@@ -236,6 +236,7 @@ DEFAULT_RISK_PER_TRADE_INR: Final = 2_000
 DEFAULT_ACCOUNT_TRADE_LIMITS: Final[dict[str, int]] = {
     "macro": 20,
     "nifty": 5,
+    "nifty_5m": 20,
     "ny_session": 3,
     "sweep_4h": 3,
 }
@@ -327,6 +328,8 @@ class RoutingRule:
 
 
 ACCOUNT_ROUTING: tuple[RoutingRule, ...] = (
+    # Dedicated 5m index scalping book: isolated from all other strategies/accounts.
+    RoutingRule("nifty_5m", ("engulfing_66_sma_5m",)),
     # India book: the trend strategies on the NSE universe, any time.
     RoutingRule("nifty", ("adaptive_trend", "engulfing_66_sma"), NSE_ASSET_GROUPS),
     # Global book outside the New York session.
@@ -417,6 +420,7 @@ def routing_state() -> dict:
 BUILTIN_ACCOUNT_NAMES: Final[tuple[str, ...]] = (
     "macro",
     "nifty",
+    "nifty_5m",
     "ny_session",
     "sweep_4h",
 )

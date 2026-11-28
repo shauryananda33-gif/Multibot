@@ -9,6 +9,7 @@ def test_original_account_limits_are_restored():
     assert DEFAULT_ACCOUNT_TRADE_LIMITS == {
         "macro": 20,
         "nifty": 5,
+        "nifty_5m": 20,
         "ny_session": 3,
         "sweep_4h": 3,
     }
@@ -21,6 +22,7 @@ def test_original_account_limits_are_restored():
     [
         ("macro", 20),
         ("nifty", 5),
+        ("nifty_5m", 20),
         ("ny_session", 3),
         ("sweep_4h", 3),
     ],

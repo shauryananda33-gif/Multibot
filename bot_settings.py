@@ -434,13 +434,36 @@ def _write(path: str, state: dict) -> None:
     os.replace(tmp, path)
 
 
+def _merge_new_builtins(raw: Any) -> Any:
+    """Append newly shipped built-in accounts/rules missing from older saved state."""
+    if not isinstance(raw, dict):
+        return raw
+    defaults = default_settings()
+    accounts = list(raw.get("accounts") or [])
+    seen_accounts = {str(a.get("name", "")).strip().lower() for a in accounts if isinstance(a, dict)}
+    added = False
+    for default_acct in defaults["accounts"]:
+        if default_acct["name"] not in seen_accounts:
+            accounts.append(default_acct)
+            added = True
+    rules = list(raw.get("rules") or [])
+    seen_rule_accounts = {str(r.get("account", "")).strip().lower() for r in rules if isinstance(r, dict)}
+    for idx, default_rule in enumerate(defaults["rules"]):
+        if default_rule["account"] not in seen_rule_accounts:
+            rules.insert(idx, default_rule)
+            added = True
+    if not added:
+        return raw
+    return {**raw, "accounts": accounts, "rules": rules}
+
+
 def load() -> dict:
     """Load durable settings, importing the legacy JSON file on first use."""
     if _DATABASE is not None:
         stored = _DATABASE.load_app_config(_CONFIG_KEY)
         if stored is not None:
             try:
-                return apply(normalize(stored))
+                return apply(normalize(_merge_new_builtins(stored)))
             except ValueError as exc:
                 logger.error("Stored settings invalid; using compiled defaults | error=%s", exc)
                 state = default_settings()

@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-11-28 (Session 3) — `Engulf 66 SMA 5min` + Dedicated `nifty_5m` Account
+
+### Summary
+- Added `engulfing_66_sma_5m` (`Engulf 66 SMA 5min`) for `^NSEI` and `^NSEBANK` on `5m` completed candles (`period="5d"`).
+- Added dedicated `nifty_5m` account (`₹100,000` capital, `₹2,000` risk, `1:2` target = `₹4,000`, `daily_trade_limit=20`).
+- Added editable per-asset daily trade cap (`max_trades_per_asset=10`): all signals still generate and record in `signal_events`, while trades above 10/asset/day return `ASSET_DAILY_LIMIT`.
+
+### Files Changed & Blast Radius
+1. **[strategies/engulfing_66_sma/strategy.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/strategies/engulfing_66_sma/strategy.py)**: Parameterized `_timeframe_label` and `_candle_delta` on `Engulfing66SMA` so `5m` subclasses cleanly without duplicating indicator/signal logic.
+2. **[strategies/engulfing_66_sma_5m/strategy.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/strategies/engulfing_66_sma_5m/strategy.py)** & **[\_\_init\_\_.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/strategies/engulfing_66_sma_5m/__init__.py)**: New strategy package; `assets=NIFTY_SYMBOLS`, `timeframes=("5m",)`, `account="nifty_5m"`, `max_trades_per_asset=10`.
+3. **[strategies/registry.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/strategies/registry.py)**: Added `"engulfing_66_sma_5m"` to `BUILTIN_STRATEGY_IDS`.
+4. **[config.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/config.py)**: Added `"nifty_5m": 20` to `DEFAULT_ACCOUNT_TRADE_LIMITS` & `BUILTIN_ACCOUNT_NAMES`, plus `RoutingRule("nifty_5m", ("engulfing_66_sma_5m",))` at the top of `ACCOUNT_ROUTING`.
+5. **[bot_settings.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/bot_settings.py)**: Added `_merge_new_builtins()` in `load()` so existing Supabase `bot_settings` rows inherit `nifty_5m` without resetting operator edits.
+6. **[yahoo_provider.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/yahoo_provider.py)**: Added `"5m": 45.0` to `YF_TTL_BY_INTERVAL` and `"5m": 1800.0` to `YAHOO_STALE_GRACE_BY_INTERVAL`.
+7. **[db.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/db.py)**, **[strategy_service.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/strategy_service.py)**, **[signal_lifecycle.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/signal_lifecycle.py)**: Added `count_trades_today()`, `ASSET_DAILY_LIMIT` gate (records signal, blocks >10 trades/asset/day), and `TERMINAL`/`actionable` handling.
+8. **Tests & Docs**: Updated `tests/test_config.py`, `tests/test_account_limits.py`, `tests/test_account_routing.py`, `AI_REBUILD_SPEC.md`, `README.md`; added `strategies/engulfing_66_sma_5m/tests/test_strategy.py`.
+
+---
+
 ## 2026-11-28 (Session 2) — Bug Fixes, Docs Sync, Skills & Context Anchor
 
 ### Summary

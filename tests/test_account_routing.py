@@ -182,7 +182,7 @@ def test_trade_limits_are_untouched_by_routing():
     from config import ACCOUNT_TRADE_LIMITS, DEFAULT_ACCOUNT_TRADE_LIMITS
 
     assert DEFAULT_ACCOUNT_TRADE_LIMITS == {
-        "macro": 20, "nifty": 5, "ny_session": 3, "sweep_4h": 3,
+        "macro": 20, "nifty": 5, "nifty_5m": 20, "ny_session": 3, "sweep_4h": 3,
     }
     assert all(ACCOUNT_TRADE_LIMITS[name] == limit
                for name, limit in DEFAULT_ACCOUNT_TRADE_LIMITS.items())

@@ -9,7 +9,7 @@ def test_account_size():assert ACCOUNT_SIZE_INR==DEFAULT_ACCOUNT_SIZE_INR
 def test_risk_per_trade():assert RISK_PER_TRADE_INR==DEFAULT_RISK_PER_TRADE_INR
 def test_independent_account_limits():assert ACCOUNT_TRADE_LIMITS==DEFAULT_ACCOUNT_TRADE_LIMITS
 def test_leverage_is_one_x():assert LEVERAGE==1.0
-def test_four_accounts_are_configured():assert ACCOUNT_NAMES==("macro","nifty","ny_session","sweep_4h")
+def test_four_accounts_are_configured():assert ACCOUNT_NAMES==("macro","nifty","nifty_5m","ny_session","sweep_4h")
 def test_timezone_is_ist():assert IST_TIMEZONE=="Asia/Kolkata"
 def test_primary_timeframe_is_one_hour():assert DEFAULT_TIMEFRAME=="1h"
 def test_signal_freshness_is_one_hour():assert SIGNAL_FRESHNESS_HOURS==1

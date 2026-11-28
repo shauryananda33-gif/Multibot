@@ -135,6 +135,9 @@ class StrategyService:
             account=self.accounts[account_name]
             if not can_open_trade(account):
                 self.database.update_signal_status(sid,"ACCOUNT_LIMIT"); return self._result(symbol,signal,account_name,"ACCOUNT_DAILY_LIMIT",signal_id=sid)
+            max_per_asset = (strategy.manifest.parameters.get("max_trades_per_asset") or {}).get("default")
+            if max_per_asset is not None and self.database.count_trades_today(account_name, symbol, current.date().isoformat()) >= int(max_per_asset):
+                self.database.update_signal_status(sid,"ASSET_DAILY_LIMIT"); return self._result(symbol,signal,account_name,"ASSET_DAILY_LIMIT",signal_id=sid)
             plan_tuple=strategy.build_trade_plan(signal,entry=current_price)
             if not plan_tuple:
                 self.database.update_signal_status(sid,"NO_TRADE_PLAN"); return self._result(symbol,signal,account_name,"NO_TRADE_PLAN",signal_id=sid)

@@ -13,6 +13,7 @@ from .base import Strategy
 BUILTIN_STRATEGY_IDS: tuple[str, ...] = (
     "adaptive_trend",
     "engulfing_66_sma",
+    "engulfing_66_sma_5m",
     "sweep_v2",
 )
 

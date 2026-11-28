@@ -30,7 +30,7 @@ from candles import validate_hourly_observations
 from config import IST_TIMEZONE
 from yahoo_request_coordinator import GLOBAL_YAHOO_COORDINATOR, YahooRequestQueueTimeout
 
-YF_TTL_BY_INTERVAL = {"1m": 45.0, "30m": 120.0, "1h": 300.0, "4h": 300.0, "1d": 600.0}
+YF_TTL_BY_INTERVAL = {"1m": 45.0, "5m": 45.0, "30m": 120.0, "1h": 300.0, "4h": 300.0, "1d": 600.0}
 YAHOO_BACKOFF_SECONDS = 120.0
 YAHOO_MAX_BACKOFF_SECONDS = 1800.0
 YAHOO_STALE_GRACE_SECONDS = 900.0
@@ -41,6 +41,7 @@ YAHOO_STALE_GRACE_SECONDS = 900.0
 # monitoring.
 YAHOO_STALE_GRACE_BY_INTERVAL = {
     "1m": 90.0,
+    "5m": 1800.0,
     "30m": 2 * 60 * 60.0,
     "1h": 4 * 60 * 60.0,
     "4h": 8 * 60 * 60.0,

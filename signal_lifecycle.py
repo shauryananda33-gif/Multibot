@@ -6,7 +6,7 @@ import pandas as pd
 from signal_gate import signal_status
 from strategies.base import Signal
 
-TERMINAL={"NON_DIRECTIONAL","STALE","DUPLICATE_LIMIT","ACCOUNT_LIMIT","NO_TRADE_PLAN","DELIVERED","ERROR"}
+TERMINAL={"NON_DIRECTIONAL","STALE","DUPLICATE_LIMIT","ACCOUNT_LIMIT","ASSET_DAILY_LIMIT","NO_TRADE_PLAN","DELIVERED","ERROR"}
 
 def new_signal_id(): return uuid4().hex
 
@@ -51,5 +51,5 @@ def dashboard_signal(event, send_state=None, delivery=None, now=None):
     out["delivery"]=delivery
     levels=(out.get("entry"),out.get("stop_loss"),out.get("take_profit"))
     out["has_trade_levels"]=all(value is not None for value in levels)
-    out["actionable"]=bool(out["has_trade_levels"] and freshness=="FRESH" and str(out.get("pipeline_status","")).upper() not in {"STALE","ERROR","NO_TRADE_PLAN","ACCOUNT_LIMIT","DUPLICATE_LIMIT"})
+    out["actionable"]=bool(out["has_trade_levels"] and freshness=="FRESH" and str(out.get("pipeline_status","")).upper() not in {"STALE","ERROR","NO_TRADE_PLAN","ACCOUNT_LIMIT","ASSET_DAILY_LIMIT","DUPLICATE_LIMIT"})
     return out

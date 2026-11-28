@@ -567,6 +567,22 @@ CREATE INDEX IF NOT EXISTS scan_runs_started_idx ON scan_runs(started_at DESC);
     def load_trades(self,status=None):
         with self._connect() as c: return self._load_trades_with(c,status)
 
+    def count_trades_today(self, account_name, symbol, today_iso):
+        """Count OPEN + CLOSED trades opened on `today_iso` for one (account, symbol)."""
+        target_account = str(account_name).strip().lower()
+        target_symbol = str(symbol).strip().upper()
+        target_date = str(today_iso).strip()[:10]
+        count = 0
+        for row in self.load_trades():
+            if str(row.get("account", "")).strip().lower() != target_account:
+                continue
+            if str(row.get("symbol", "")).strip().upper() != target_symbol:
+                continue
+            opened = str(row.get("opened_at") or row.get("signal_ts") or "")
+            if opened[:10] == target_date:
+                count += 1
+        return count
+
     def record_signal_event(self,signal_id,signal_key,signal,*,pipeline_status,created_at=None):
         ts=created_at or datetime.now(timezone.utc).isoformat()
         metadata=dict(signal.metadata or {})
