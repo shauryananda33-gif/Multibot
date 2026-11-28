@@ -75,7 +75,7 @@ def test_static_javascript_and_css_assets_are_cached_by_versioned_url():
             "wsgi.input": io.BytesIO(b""),
         }, lambda status, headers: captured.update(status=status, headers=dict(headers))))
         assert captured["status"] == "200 OK"
-        assert captured["headers"]["Cache-Control"] == "no-cache, max-age=0, must-revalidate"
+        assert captured["headers"]["Cache-Control"] == "public, max-age=3600"
         assert body
 
 
