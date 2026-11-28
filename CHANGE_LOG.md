@@ -1,0 +1,49 @@
+# MULTIBOT2 — Change Log & Session Context Anchor
+
+> **Rule for future sessions:** Always read this file first before starting work so context, architectural decisions, recent fixes, and pending manual steps are never lost. Update this file whenever code, docs, or infrastructure changes are made.
+
+---
+
+## 2026-11-28 (Session 2) — Bug Fixes, Docs Sync, Skills & Context Anchor
+
+### Summary
+- Installed `caveman` and `ponytail` skills globally in `C:\Users\Vivek\.gemini\config\skills\`.
+- Audited core pipeline code line-by-line and fixed 4 bugs.
+- Updated `release_notes.py`, `WHATS_NEW.md`, `README.md`, and created `docs/architecture/PIPELINE_AND_ARCHITECTURE.md`.
+
+### Code Changes & Blast Radius
+1. **[main.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/main.py) (`_scan_error_entries`)**:
+   - **Fix:** Moved `detail = ...` assignment above `if is_market:` (previously raised `UnboundLocalError` before `detail` was defined, silently swallowing all `MARKET_DATA_ERROR` Telegram alerts in `_notify_scan()`).
+   - **Affects:** Scan error Telegram notifications (`MSG-SCAN-ERROR-V1`).
+   - **Test added:** `tests/test_main.py::test_scan_error_entries_formats_market_data_error`.
+2. **[main.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/main.py) (`_handle_command` `/test`)**:
+   - **Fix:** Checked `frame is not None and not frame.empty` instead of `is not None` so an empty DataFrame no longer reports Yahoo Finance as healthy.
+   - **Affects:** Telegram `/test` command only.
+3. **[trade_monitor.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/trade_monitor.py) (`monitor_once`)**:
+   - **Fix:** Changed `row.get("opened_at", row.get("signal_ts"))` to `row.get("opened_at") or row.get("signal_ts")` and converted to `Asia/Kolkata` before `.date().isoformat()` (prevents `NaTType` crash when `opened_at` is `None` and prevents UTC/IST date mismatch on `reservation_date`).
+   - **Affects:** Paper trade closing & daily risk settlement in `close_trade_and_settle_account()`.
+4. **[yahoo_provider.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/yahoo_provider.py) (`fetch`)**:
+   - **Fix:** Wrapped split/corporate-action full re-download in `try/except (YahooRequestQueueTimeout, YahooDataError)` with `_stale(key)` fallback.
+   - **Affects:** CSV merge path when overlapping bars differ by >0.5%.
+
+### Documentation Changes
+- **[docs/architecture/PIPELINE_AND_ARCHITECTURE.md](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/docs/architecture/PIPELINE_AND_ARCHITECTURE.md)**: Created canonical pipeline & architecture reference.
+- **[README.md](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/README.md)**: Updated architecture diagram (3 strategies + CSV cache), repository structure, and What's New section.
+- **[release_notes.py](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/release_notes.py)** & **[WHATS_NEW.md](file:///C:/Users/Vivek/.gemini/antigravity/scratch/Multibot/WHATS_NEW.md)**: Updated v3.5.0 release highlights (kept `APP_VERSION = "3.5.0"` to preserve `test_version_consistency.py`).
+
+---
+
+## 2026-11-28 (Session 1, Commit `aef8399`) — Silence Bug, CSV Cache & Bandwidth Cuts
+
+### Summary
+- Fixed `NotificationService.deliver()` silencing `REMINDER` and `TRADE_CLOSED` alerts (caused 43,294 silent `MSG-REMINDER-V1` rows in `multibot.deliveries` and 13 overdue reminders).
+- Added GitHub CSV candle baseline + incremental Yahoo delta fetch (`yahoo_provider.py`, `tools/sync_candle_csvs.py`, `.github/workflows/sync-candles.yml`, `data/candles/.gitkeep`).
+- Reduced Render (5 GB/mo) & Supabase free-tier bandwidth: `SNAPSHOT_CACHE_TTL_SECONDS=180`, `SIGNAL_HISTORY_LIMIT=150`, ETag ignoring `generated_at`, gzip `>=512B`, static `max-age=3600`, `persist_cache=False`, `monitor_loop` 120s idle sleep, `ReminderService` 60s interval, lease heartbeat 30s/90s.
+- Synced `docs/API.md`, `docs/RENDER_ONLY_DEPLOYMENT.md`, `docs/SUPABASE_DATABASE.md`, `MANIFEST.txt`, `market_data.py`, `supabase_db.py`, `app.js`.
+
+---
+
+## Pending / Operational Notes
+- **Render & GitHub:** Push local commits to `origin/main` so Render deploys the Session 2 fixes.
+- **Candle CSV Baselines:** Run `python tools/sync_candle_csvs.py` locally (or trigger **Sync Candle CSVs** in GitHub Actions) to populate `data/candles/`.
+- **Pytest:** Run `python -m pytest -x -q` in an environment with Python + dependencies installed (`pytest` is not available in the local Windows agent shell).

@@ -795,14 +795,21 @@ class YahooProvider:
                 merged = self._merge_csv_frames(csv_base, frame)
                 if merged is None:
                     # Corporate action / split detected on overlapping bars: refresh full window.
-                    full_to_save = self._download_and_normalize(
-                        symbol,
-                        period=period,
-                        interval=interval,
-                        validate_hourly=validate_hourly,
-                        priority=priority,
-                    )
-                    frame = full_to_save
+                    try:
+                        full_to_save = self._download_and_normalize(
+                            symbol,
+                            period=period,
+                            interval=interval,
+                            validate_hourly=validate_hourly,
+                            priority=priority,
+                        )
+                        frame = full_to_save
+                    except (YahooRequestQueueTimeout, YahooDataError):
+                        stale = self._stale(key)
+                        if stale is not None:
+                            self._mark_provenance(provenance, source="stale_fallback", cache_key=self._key_id(key))
+                            return stale
+                        raise
                 else:
                     full_to_save = merged
                     trimmed = self._trim_to_period(merged, period)

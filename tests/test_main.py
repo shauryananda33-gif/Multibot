@@ -322,3 +322,13 @@ def test_dashboard_etag_ignores_generated_at_and_supports_gzip(monkeypatch):
     assert captured["status"] == "200 OK"
     assert captured["headers"].get("Content-Encoding") == "gzip"
     assert json.loads(gzip.decompress(body)) == second_payload
+
+
+def test_scan_error_entries_formats_market_data_error():
+    from types import SimpleNamespace
+    sig = SimpleNamespace(metadata={"diagnostics": {"error": "Yahoo returned no data for RELIANCE.NS"}})
+    result = SimpleNamespace(symbol="RELIANCE", reason="MARKET_DATA_ERROR: no data", signal=sig)
+    entries = main._scan_error_entries([result])
+    assert len(entries) == 1
+    assert entries[0]["heading"] == "MARKET DATA ERROR"
+    assert entries[0]["reason"] == "no market data"

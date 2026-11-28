@@ -28,6 +28,10 @@ It is deliberately **paper only**. It does not place live broker orders.
 **Single source of truth:** `release_notes.py`
 
 - 🔇 Per-sweep scan noise is gone: the 🔎 Scan complete Telegram bubble is now strictly opt-in per channel, and stale, duplicate, reminder, account-limit and MARKET_DATA_ERROR evaluations stay silent while the dashboard and deliveries audit still record every evaluated signal.
+- 🔔 Reminders & trade-close alerts fixed: NotificationService now applies the silence gate only to initial SIGNAL deliveries, preventing REMINDER and TRADE_CLOSED alerts from being suppressed.
+- 📈 GitHub CSV candle cache: 1D/1H/30M candles load from local/GitHub CSV baselines and only tail-fetch recent bars from Yahoo Finance, bypassing Supabase candle storage.
+- ⚡ Render & Supabase bandwidth cuts: dashboard snapshots cache for 180s with stable ETags (304 Not Modified), gzip compression (>=512B), 150-signal history cap, and slower idle polling.
+- 🛠️ Scan error & trade monitor fixes: fixed MARKET_DATA_ERROR alert formatting (UnboundLocalError), null opened_at handling in trade settlement, and split re-download fallback.
 - 🔐 Telegram chat ids are now secrets in the notifications card: the dashboard API redacts every channel target and secret, so a screenshot or API read can no longer expose your chat id.
 - 🛟 The environment-default Telegram channel shows a Default chip instead of Remove, so the last working notification path cannot be deleted by accident, and editing it only changes the chat id.
 - 📱 The notifications card was rebuilt into a compact three-line channel row with a scannable event grid, saving vertical space in Tools.
@@ -58,26 +62,30 @@ Material 3 is presentation-only. It does not introduce a second DOM, component f
                     │  automatic discovery │
                     └──────────┬───────────┘
                                │
-                  ┌────────────┴────────────┐
-                  ▼                         ▼
-          Trend Pulse                Sweep 4H
-                  │                         │
-                  └────────────┬────────────┘
+          ┌────────────────────┼────────────────────┐
+          ▼                    ▼                    ▼
+     Trend Pulse            Sweep 4H          Engulf 66 SMA
+          │                    │                    │
+          └────────────────────┼────────────────────┘
+                               ▼
+                    CSV Baseline + Yahoo Delta
+                    (data/candles + /tmp cache)
                                ▼
                          Canonical Signal
-                               │
                                ▼
                     ┌──────────────────────┐
                     │   Generic Pipeline   │
                     ├──────────────────────┤
+                    │ market session gate  │
+                    │ news gate (optional) │
                     │ completion           │
-                    │ freshness            │
-                    │ duplicate gate       │
+                    │ freshness (<= 1h)    │
+                    │ duplicate gate (<=2) │
                     │ account/risk         │
-                    │ trade plan            │
-                    │ persistence           │
-                    │ Telegram              │
-                    │ dashboard             │
+                    │ trade plan           │
+                    │ persistence          │
+                    │ NotificationService  │
+                    │ dashboard (ETag/gzip)│
                     └──────────┬───────────┘
                                ▼
                      🗄️ Supabase Postgres / SQLite
@@ -376,35 +384,50 @@ Signal send history is persisted so duplicate protection can survive process res
 
 ```text
 MULTIBOT2/
-├── main.py                    # runtime orchestration
-├── config.py                  # locked system configuration
-├── strategy_engine.py          # strategy data/evaluation boundary
-├── strategy_service.py         # shared signal lifecycle
-├── backtest.py                 # registry-driven research engine
-├── trading.py                  # account/risk/trade primitives
-├── signal_gate.py              # freshness + duplicate controls
-├── market_data.py              # canonical market data helpers
-├── candles.py                  # candle normalization/building
-├── yahoo_provider.py            # Yahoo-only provider
-├── db.py                        # local SQLite persistence primitives
-├── supabase_db.py               # Supabase Postgres production adapter
-├── telegram.py                  # Telegram adapter
-├── dashboard.py                 # dashboard backend payloads
-├── sweep_engine.py              # Sweep 4H calculations
+├── main.py                    # runtime orchestration, leader lease & HTTP/WSGI server
+├── config.py                  # locked system configuration & 25-asset universe
+├── strategy_engine.py         # strategy data/evaluation boundary
+├── strategy_scheduler.py      # event-aligned strategy wakeup scheduler
+├── strategy_service.py        # shared signal lifecycle (evaluate -> persist -> notify -> trade)
+├── backtest.py                # registry-driven research engine
+├── trading.py                 # account/risk/trade primitives
+├── trade_monitor.py           # SL/TP monitoring & atomic trade settlement
+├── signal_gate.py             # freshness (1h) + duplicate identity controls
+├── signal_lifecycle.py        # canonical signal status & dashboard projection
+├── market_data.py             # canonical market data helpers & OHLC quarantine
+├── market_sessions.py         # NSE / COMEX Gold / Forex / Crypto session hours
+├── candles.py                 # candle normalization/building
+├── yahoo_provider.py          # Yahoo-only provider with CSV baseline + delta fetch
+├── notification_service.py    # multi-channel delivery, kind-gated silence & retries
+├── reminders.py               # persistent 1h reminder worker
+├── news_gate.py               # optional high-impact news pause gate
+├── db.py                      # local SQLite persistence primitives
+├── supabase_db.py             # Supabase Postgres production adapter
+├── telegram.py                # Telegram adapter
+├── dashboard.py               # dashboard backend payloads
+├── sweep_engine.py            # Sweep 4H candle builder & classifier
+├── release_notes.py           # canonical version & What's New source
+├── CHANGE_LOG.md              # session-to-session change log & context anchor
+│
+├── data/candles/              # GitHub-tracked historical CSV baselines (1d/1h/30m)
+├── tools/sync_candle_csvs.py  # CLI script to seed/update candle CSVs
+├── .github/workflows/         # weekday CSV sync & CI workflows
 │
 ├── strategies/
-│   ├── base.py                 # stable plug-in contract
-│   ├── registry.py              # automatic discovery
-│   ├── _template/              # new-strategy starter
-│   ├── adaptive_trend/          # Trend Pulse
-│   └── sweep_v2/                # Sweep 4H plug-in
+│   ├── base.py                # stable plug-in contract
+│   ├── registry.py            # automatic discovery
+│   ├── _template/             # new-strategy starter
+│   ├── adaptive_trend/        # Trend Pulse
+│   ├── engulfing_66_sma/      # Engulf 66 SMA
+│   └── sweep_v2/              # Sweep 4H plug-in
 │
-├── tests/                       # canonical test suite
+├── tests/                     # canonical test suite
 │
-├── README.md                    # human-facing documentation
-├── AI_REBUILD_SPEC.md           # complete AI reconstruction contract
-├── STRATEGY_DEVELOPER_GUIDE.md  # how to create a plug-in
-├── FINALIZATION_RULEBOOK.md     # release/regression rules
+├── docs/architecture/         # pipeline & architecture specs
+├── README.md                  # human-facing documentation
+├── AI_REBUILD_SPEC.md         # complete AI reconstruction contract
+├── STRATEGY_DEVELOPER_GUIDE.md # how to create a plug-in
+├── FINALIZATION_RULEBOOK.md   # release/regression rules
 └── MULTIBOT2_CANONICAL_NOTES.md # compact canonical facts
 ```
 

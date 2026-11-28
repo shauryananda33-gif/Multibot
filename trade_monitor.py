@@ -51,11 +51,14 @@ class TradeMonitor:
                 with self.account_lock:
                     pnl=realized_pnl(trade,exit_price=exit_price)
                     payload=dict(row); payload.update({"status":"CLOSED","exit_price":exit_price,"exit_reason":reason,"closed_at":current.isoformat(),"pnl":pnl,"result":"WIN" if pnl>=0 else "LOSS"})
+                    opened_ts = pd.Timestamp(row.get("opened_at") or row.get("signal_ts"))
+                    if opened_ts.tzinfo is None:
+                        opened_ts = opened_ts.tz_localize("Asia/Kolkata")
                     closed_once, account_row = self.database.close_trade_and_settle_account(
                         row["id"], payload, current.isoformat(), account_name=row["account"],
                         pnl=pnl, planned_risk=trade.planned_risk,
                         reset_date=current.tz_convert("Asia/Kolkata").date().isoformat(),
-                        reservation_date=pd.Timestamp(row.get("opened_at", row.get("signal_ts"))).date().isoformat(),
+                        reservation_date=opened_ts.tz_convert("Asia/Kolkata").date().isoformat(),
                     )
                     if not closed_once:
                         # Another monitor pass already closed this trade. The

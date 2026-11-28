@@ -554,6 +554,7 @@ def _scan_error_entries(results):
         symbol = str(getattr(result, "symbol", "") or "")
         asset = LIVE_ASSET_MAP.get(symbol.strip().upper())
         label = asset.label if asset is not None else symbol
+        detail = diagnostics.get("error") or reason.split(":", 1)[-1].strip() or reason
         is_market = reason.startswith("MARKET_DATA_ERROR")
         if is_market:
             heading = "MARKET DATA ERROR"
@@ -567,7 +568,6 @@ def _scan_error_entries(results):
         else:
             heading = "DELIVERY ERROR"
             short_reason = "telegram delivery failed"
-        detail = diagnostics.get("error") or reason.split(":", 1)[-1].strip() or reason
         candle = None
         failing = diagnostics.get("failing_candle")
         if failing:
@@ -989,7 +989,7 @@ def _handle_command(chat_id,cmd):
             _send_chat(chat_id,msg_news_pause(paused))
         elif cmd=="/refreshnews": NEWS.refresh(); _send_chat(chat_id,msg_news_refresh())
         elif cmd=="/backtest": _send_chat(chat_id,msg_backtest())
-        elif cmd=="/test": ensure_runtime(); ok=SERVICE.engine.provider.fetch("RELIANCE.NS",period="2d",interval="1d",validate_hourly=False) is not None; _send_chat(chat_id,msg_test(ok,"Yahoo Finance responded." if ok else "Yahoo Finance did not respond."))
+        elif cmd=="/test": ensure_runtime(); frame=SERVICE.engine.provider.fetch("RELIANCE.NS",period="2d",interval="1d",validate_hourly=False); ok=frame is not None and not frame.empty; _send_chat(chat_id,msg_test(ok,"Yahoo Finance responded." if ok else "Yahoo Finance did not respond."))
     except Exception as exc:
         logger.exception("Telegram command failed")
         try:
