@@ -94,7 +94,8 @@ class Engulfing66SMA(Strategy):
 
     @staticmethod
     def _completed_only(frame: pd.DataFrame, now: pd.Timestamp, timeframe: str) -> pd.DataFrame:
-        if frame.empty or timeframe != "1h":
+        interval = {"1h": pd.Timedelta(hours=1), "5m": pd.Timedelta(minutes=5)}.get(str(timeframe).lower())
+        if frame.empty or interval is None:
             return frame
         current = pd.Timestamp(now)
         if current.tzinfo is None:
@@ -106,7 +107,7 @@ class Engulfing66SMA(Strategy):
         if data.index.tz is None:
             raise ValueError("Engulfing 66 SMA candle timestamps must be timezone-aware")
         last = data.index[-1].tz_convert(IST)
-        if last + pd.Timedelta(hours=1) > current:
+        if last + interval > current:
             return data.iloc[:-1]
         return data
 

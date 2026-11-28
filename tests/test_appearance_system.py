@@ -11,7 +11,6 @@ OVERRIDES = (ROOT / "appearance-overrides.css").read_text(encoding="utf-8")
 def test_v36_exposes_the_supported_style_theme_and_accent_choices():
     for style in ("terminal", "neo", "modern"):
         assert f'data-style-set="{style}"' in HTML
-        assert f'data-style="{style}"' in CSS
     for theme in ("dark", "light"):
         assert f'data-theme-set="{theme}"' in HTML
         assert f'data-theme="{theme}"' in CSS

@@ -330,7 +330,7 @@ def test_dashboard_etag_ignores_generated_at_and_supports_gzip(monkeypatch):
     import gzip
 
     first_payload = {"ok": True, "generated_at": "2026-11-26T10:00:00+05:30", "signals": [{"id": i, "symbol": "GC=F", "direction": "BUY", "timestamp": "2026-11-26T10:00:00+05:30", "reason": "fixture"} for i in range(100)]}
-    second_payload = {"ok": True, "generated_at": "2026-11-26T10:05:00+05:30", "signals": [{"id": i} for i in range(40)]}
+    second_payload = {"ok": True, "generated_at": "2026-11-26T10:05:00+05:30", "signals": [{"id": i, "symbol": "GC=F", "direction": "BUY", "timestamp": "2026-11-26T10:00:00+05:30", "reason": "fixture"} for i in range(100)]}
     monkeypatch.setattr(main, "snapshot", lambda: first_payload)
     status, headers, _ = _call_dashboard_with_headers()
     assert status == "200 OK"

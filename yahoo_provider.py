@@ -276,7 +276,9 @@ class YahooProvider:
             frame = pd.read_csv(path)
             if frame.empty or "timestamp" not in frame.columns:
                 return None
-            timestamps = pd.to_datetime(frame.pop("timestamp"), utc=True, errors="coerce")
+            timestamps = pd.DatetimeIndex(
+                pd.to_datetime(frame.pop("timestamp"), utc=True, errors="coerce")
+            )
             if timestamps.isna().any():
                 return None
             required = ["open", "high", "low", "close"]
