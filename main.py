@@ -257,7 +257,8 @@ def monitor_loop():
         except Exception: logger.exception("Monitor cycle failed")
         STOP.wait(wait_seconds)
 def _backtest_payload(strategy,symbol,period):
-    _require_runtime_leader()
+    # Historical backtests are read-only: they may run on a standby web process.
+    # Runtime-leader checks remain mandatory on every live scan/trading path.
     ensure_runtime(); key=strategy.strip().lower(); st=REGISTRY.get(key); symbol=symbol.strip().upper()
     if symbol not in st.manifest.assets and key not in EXTRA_ASSET_STRATEGIES.get(symbol, ()): raise ValueError(f"{key} does not support {symbol}")
     interval,data_period=st.data_request(symbol,period=period)
